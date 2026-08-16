@@ -37,6 +37,8 @@ CREATE TABLE weekly_summaries (
 -- Create user_profiles table (Tracks TDEE and baseline metrics)
 CREATE TABLE user_profiles (
     user_id TEXT PRIMARY KEY DEFAULT 'anonymous',
+    username TEXT NOT NULL DEFAULT 'User',
+    gender TEXT NOT NULL DEFAULT 'male',
     age INTEGER NOT NULL DEFAULT 30,
     height_cm INTEGER NOT NULL DEFAULT 170,
     weight_kg NUMERIC NOT NULL DEFAULT 70.0,

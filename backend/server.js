@@ -218,7 +218,7 @@ app.post('/api/weekly-summary', async (req, res) => {
 // Sets up user profile, uses Groq to analyze natural language activity description to determine TDEE
 app.post('/api/profile', async (req, res) => {
   try {
-    const { user_id = 'anonymous', age, height_cm, weight_kg, gender = 'male', activity_description } = req.body;
+    const { user_id = 'anonymous', username = 'User', age, height_cm, weight_kg, gender = 'male', activity_description } = req.body;
     
     if (!activity_description) return res.status(400).json({ error: 'activity_description is required' });
 
@@ -247,12 +247,12 @@ Responde ÚNICAMENTE con un JSON válido con este formato: {"activity_multiplier
 
     // Update or insert profile
     const { data, error } = await supabase.from('user_profiles').upsert([{ 
-        user_id, age, height_cm, weight_kg, activity_multiplier, tdee_kcal, updated_at: new Date().toISOString()
+        user_id, username, gender, age, height_cm, weight_kg, activity_multiplier, tdee_kcal, updated_at: new Date().toISOString()
     }]).select();
 
     if (error) throw error;
 
-    res.json({ success: true, data, message: `Groq analizó tu semana y te asignó un multiplicador de ${activity_multiplier} (TDEE: ${tdee_kcal} kcal).` });
+    res.json({ success: true, data, message: `Groq analizó la semana de ${username} y asignó un multiplicador de ${activity_multiplier} (TDEE: ${tdee_kcal} kcal).` });
   } catch (error) {
     console.error('Error in profile setup:', error);
     res.status(500).json({ error: 'Failed to update profile' });
