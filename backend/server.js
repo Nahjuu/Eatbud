@@ -1,264 +1,211 @@
 import express from 'express';
 import cors from 'cors';
-import * as dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import Groq from 'groq-sdk';
 
 dotenv.config();
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+const requiredVariables = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'GROQ_API_KEY'];
+const missingVariables = requiredVariables.filter((name) => !process.env[name]);
 
-const PORT = process.env.PORT || 3000;
-const USDA_API_KEY = process.env.USDA_API_KEY || 'DEMO_KEY';
-
-// Initialize Supabase Client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-// Initialize Groq Client
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-// Utility to get USDA calories for a query
-async function getBaselineCalories(query) {
-  try {
-    const response = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&pageSize=1&api_key=${USDA_API_KEY}`);
-    const data = await response.json();
-    if (data.foods && data.foods.length > 0) {
-      // Find energy (kcal) in nutrients
-      const nutrients = data.foods[0].foodNutrients;
-      const energy = nutrients.find(n => n.nutrientName.includes('Energy') && n.unitName === 'kcal');
-      return energy ? energy.value : 100; // default 100 kcal per 100g if not found
-    }
-    return 100; // fallback baseline
-  } catch (err) {
-    console.error('USDA API Error:', err);
-    return 100;
-  }
+if (missingVariables.length) {
+  throw new Error(`Faltan variables de entorno: ${missingVariables.join(', ')}`);
 }
 
-// 1. POST /api/logs
+const app = express();
+const port = Number(process.env.PORT) || 3000;
+const userId = 'anonymous';
+const model = process.env.GROQ_MODEL || 'groq/compound-mini';
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+app.use(express.json({ limit: '10kb' }));
+
+function dateRange(date) {
+  const value = date || new Date().toISOString().slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error('La fecha debe tener formato YYYY-MM-DD');
+  }
+
+  const start = new Date(`${value}T00:00:00.000Z`);
+
+  if (Number.isNaN(start.valueOf())) {
+    throw new Error('La fecha no es válida');
+  }
+
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  return { value, start: start.toISOString(), end: end.toISOString() };
+}
+
+function number(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 10) / 10 : 0;
+}
+
+function databaseMessage(error) {
+  if (error.message.includes('parsed_data')) {
+    return 'La base de datos usa un esquema antiguo. Ejecuta backend/schema.sql en Supabase y vuelve a intentarlo.';
+  }
+
+  return 'No se pudo consultar la base de datos.';
+}
+
+function parseAnalysis(content) {
+  const start = content.indexOf('{');
+  const end = content.lastIndexOf('}');
+
+  if (start === -1 || end === -1) {
+    throw new Error('Groq no devolvió un objeto JSON');
+  }
+
+  const response = JSON.parse(content.slice(start, end + 1));
+  const foods = Array.isArray(response.foods) ? response.foods : [];
+
+  if (!foods.length) {
+    throw new Error('Groq no encontró alimentos en el texto');
+  }
+
+  const normalizedFoods = foods.map((food) => ({
+    name: String(food.name || 'Alimento'),
+    quantity: number(food.quantity),
+    unit: String(food.unit || 'porción'),
+    calories: number(food.calories),
+    protein: number(food.protein),
+    carbs: number(food.carbs),
+    fat: number(food.fat),
+  }));
+
+  const totals = normalizedFoods.reduce(
+    (sum, food) => ({
+      calories: sum.calories + food.calories,
+      protein: sum.protein + food.protein,
+      carbs: sum.carbs + food.carbs,
+      fat: sum.fat + food.fat,
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+
+  return { foods: normalizedFoods, totals };
+}
+
+async function getDailySummary(date) {
+  const range = dateRange(date);
+  const { data, error } = await supabase
+    .from('daily_logs')
+    .select('id, food_text, parsed_data, logged_at')
+    .eq('user_id', userId)
+    .gte('logged_at', range.start)
+    .lt('logged_at', range.end)
+    .order('logged_at', { ascending: false });
+
+  if (error) throw error;
+
+  const entries = (data || []).map((log) => {
+    const analysis = log.parsed_data || {};
+
+    return {
+      id: log.id,
+      foodText: log.food_text,
+      loggedAt: log.logged_at,
+      foods: Array.isArray(analysis.foods) ? analysis.foods : [],
+      totals: analysis.totals || { calories: 0, protein: 0, carbs: 0, fat: 0 },
+    };
+  });
+
+  const totals = entries.reduce(
+    (sum, entry) => ({
+      calories: sum.calories + number(entry.totals.calories),
+      protein: sum.protein + number(entry.totals.protein),
+      carbs: sum.carbs + number(entry.totals.carbs),
+      fat: sum.fat + number(entry.totals.fat),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+
+  return { date: range.value, totals, entries };
+}
+
+async function analyzeFood(foodText) {
+  const completion = await groq.chat.completions.create({
+    model,
+    messages: [
+      {
+        role: 'system',
+        content: 'Devuelve solo JSON válido: {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}.',
+      },
+      { role: 'user', content: foodText },
+    ],
+  });
+
+  return parseAnalysis(completion.choices[0]?.message?.content || '');
+}
+
+app.get('/api/health', async (_req, res) => {
+  const { error } = await supabase.from('daily_logs').select('id, parsed_data').limit(1);
+
+  if (error) {
+    console.error('Supabase health check failed:', error.message);
+    return res.status(503).json({ ok: false, database: false, error: databaseMessage(error) });
+  }
+
+  return res.json({ ok: true, database: true, model });
+});
+
+app.get('/api/daily-summary', async (req, res) => {
+  try {
+    return res.json(await getDailySummary(req.query.date));
+  } catch (error) {
+    console.error('Could not get daily summary:', error.message);
+    return res.status(500).json({ error: databaseMessage(error) });
+  }
+});
+
 app.post('/api/logs', async (req, res) => {
-  try {
-    const { food_text, user_id = 'anonymous' } = req.body;
-    if (!food_text) return res.status(400).json({ error: 'food_text is required' });
+  const foodText = String(req.body.foodText || '').trim();
 
-    // Phase 3: Fetch Country Baseline using Groq to parse food name, then USDA for calories
-    const parsePrompt = `Extrae únicamente el nombre genérico del alimento de este texto: "${food_text}". Ejemplo: "1 manzana grande" -> "apple". Responde solo con la palabra en inglés.`;
-    const groqParse = await groq.chat.completions.create({
-      messages: [{ role: "user", content: parsePrompt }],
-      model: "llama-3.1-8b-instant",
-    });
-    const parsedFood = groqParse.choices[0].message.content.trim();
-    
-    // Fetch USDA baseline
-    const baselineKcalPer100g = await getBaselineCalories(parsedFood);
-
-    // Groq estimates baseline grams based on the text (e.g. "large apple" -> 220)
-    const gramsPrompt = `Estima el peso en gramos de esta comida: "${food_text}". Responde únicamente con el número en gramos, sin texto adicional.`;
-    const groqGrams = await groq.chat.completions.create({
-      messages: [{ role: "user", content: gramsPrompt }],
-      model: "llama-3.1-8b-instant",
-    });
-    const estimatedGrams = parseInt(groqGrams.choices[0].message.content.trim()) || 100;
-
-    // Fetch User Biases (The Secret Report)
-    const { data: biases } = await supabase.from('user_biases').select('*').eq('user_id', user_id).single();
-    const globalMultiplier = biases ? biases.global_multiplier : 1.0;
-
-    // Apply the multiplier silently
-    const adjustedGrams = estimatedGrams * globalMultiplier;
-    const ai_estimated_calories = Math.round((adjustedGrams / 100) * baselineKcalPer100g);
-
-    // Save to DB
-    const { data, error } = await supabase.from('daily_logs').insert([{ food_text, user_id, ai_estimated_calories }]).select();
-    if (error) throw error;
-    
-    res.status(201).json({ 
-      success: true, 
-      data, 
-      message: `Based on your usual portion perception, we estimate this at ~${Math.round(adjustedGrams)}g (${ai_estimated_calories} kcal).` 
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to insert log' });
+  if (!foodText) {
+    return res.status(400).json({ error: 'Escribe al menos un alimento.' });
   }
-});
 
-// 2. POST /api/daily-summary
-app.post('/api/daily-summary', async (req, res) => {
-  try {
-    const { user_id = 'anonymous' } = req.body;
-    
-    const startOfDay = new Date(); startOfDay.setUTCHours(0,0,0,0);
-    const endOfDay = new Date(); endOfDay.setUTCHours(23,59,59,999);
-
-    const { data: logs } = await supabase.from('daily_logs').select('*').eq('user_id', user_id).gte('logged_at', startOfDay.toISOString()).lte('logged_at', endOfDay.toISOString());
-    const { data: biases } = await supabase.from('user_biases').select('confidence_score').eq('user_id', user_id).single();
-
-    if (!logs || logs.length === 0) return res.status(404).json({ message: 'No logs found' });
-
-    const totalKcal = logs.reduce((acc, log) => acc + log.ai_estimated_calories, 0);
-    const foodList = logs.map(l => `${l.food_text} (~${l.ai_estimated_calories} kcal)`).join(', ');
-    
-    let prompt = `El usuario comió: ${foodList}. Total estimado: ${totalKcal} kcal. Haz un resumen nutricional breve. `;
-    
-    // Phase 4: Measurement Advice Layer
-    if (biases && biases.confidence_score < 3) {
-        prompt += `Agrega al final un mensaje de apoyo y amigable recomendando pesar la comida esta semana porque aún estamos calibrando sus estimaciones.`;
-    } else {
-        prompt += `Agrega un mensaje de apoyo diciendo que la calibración va excelente y que confías en sus porciones visuales.`;
-    }
-
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "llama-3.1-8b-instant",
-    });
-
-    const conclusion_text = chatCompletion.choices[0].message.content;
-
-    const { data: summaryData, error: summaryError } = await supabase.from('daily_summaries').insert([{ user_id, conclusion_text }]).select();
-    if (summaryError) throw summaryError;
-
-    res.json({ success: true, data: summaryData });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to generate summary' });
+  if (foodText.length > 2_000) {
+    return res.status(400).json({ error: 'El texto no puede superar 2000 caracteres.' });
   }
-});
 
-// 3. POST /api/weight
-app.post('/api/weight', async (req, res) => {
-    try {
-        const { weight_kg, user_id = 'anonymous' } = req.body;
-        const { data, error } = await supabase.from('weight_logs').insert([{ user_id, weight_kg }]).select();
-        if (error) throw error;
-
-        // Update user profile weight
-        await supabase.from('user_profiles').update({ weight_kg, updated_at: new Date().toISOString() }).eq('user_id', user_id);
-
-        res.json({ success: true, data });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Failed to log weight' });
-    }
-});
-
-// 4. POST /api/weekly-summary
-app.post('/api/weekly-summary', async (req, res) => {
   try {
-    const { user_id = 'anonymous' } = req.body;
-    
-    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
-    // Phase 2: Calibration Algorithm
-    const { data: profile } = await supabase.from('user_profiles').select('*').eq('user_id', user_id).single();
-    const { data: biases } = await supabase.from('user_biases').select('*').eq('user_id', user_id).single();
-    const { data: weightLogs } = await supabase.from('weight_logs').select('weight_kg').eq('user_id', user_id).gte('logged_at', sevenDaysAgo.toISOString()).order('logged_at', { ascending: true });
-    
-    let weight_change_kg = 0;
-    if (weightLogs && weightLogs.length >= 2) {
-        const firstWeight = weightLogs[0].weight_kg;
-        const lastWeight = weightLogs[weightLogs.length - 1].weight_kg;
-        weight_change_kg = lastWeight - firstWeight;
-    }
-
-    const { data: logsThisWeek } = await supabase.from('daily_logs').select('ai_estimated_calories').eq('user_id', user_id).gte('logged_at', sevenDaysAgo.toISOString());
-    const ai_estimated_intake_weekly = logsThisWeek ? logsThisWeek.reduce((sum, log) => sum + log.ai_estimated_calories, 0) : 0;
-    const ai_estimated_daily = ai_estimated_intake_weekly / 7;
-
-    const tdee = profile ? profile.tdee_kcal : 2000;
-    const actual_intake_daily = tdee + ((weight_change_kg * 7700) / 7);
-
-    // Calculate New Bias
-    let newMultiplier = biases ? biases.global_multiplier : 1.0;
-    if (ai_estimated_daily > 0) {
-        const rawNewBias = actual_intake_daily / ai_estimated_daily;
-        // Smoothing formula: 70% old + 30% new
-        newMultiplier = (newMultiplier * 0.7) + (rawNewBias * 0.3);
-    }
-
-    // Update Biases
-    await supabase.from('user_biases').update({ 
-        global_multiplier: newMultiplier,
-        confidence_score: (biases ? biases.confidence_score : 0) + 1,
-        last_calibrated_at: new Date().toISOString()
-    }).eq('user_id', user_id);
-
-    // Generate Weekly Summary
-    const { data: summaries } = await supabase.from('daily_summaries').select('conclusion_text, date').eq('user_id', user_id).gte('date', sevenDaysAgo.toISOString().split('T')[0]);
-    const summaryList = summaries ? summaries.map(s => `Día ${s.date}: ${s.conclusion_text}`).join('\n') : "No data.";
-    
-    let prompt = `Resúmenes de la semana:\n${summaryList}\n\nAdemás, el algoritmo detectó un cambio de peso de ${weight_change_kg}kg. `;
-    prompt += `Escribe un reporte semanal para el usuario analizando esto y dándole una meta para la siguiente semana.`;
-
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "llama-3.1-8b-instant",
-    });
-
-    const summary_text = chatCompletion.choices[0].message.content;
-    const week_start_date = sevenDaysAgo.toISOString().split('T')[0];
-
-    // Save and Purge
-    const { data: weeklyData } = await supabase.from('weekly_summaries').insert([{ user_id, week_start_date, summary_text }]).select();
-    await supabase.from('daily_logs').delete().eq('user_id', user_id).lte('logged_at', sevenDaysAgo.toISOString());
-
-    res.json({ success: true, new_multiplier: newMultiplier, data: weeklyData });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to generate weekly summary' });
-  }
-});
-
-// 5. POST /api/profile
-// Sets up user profile, uses Groq to analyze natural language activity description to determine TDEE
-app.post('/api/profile', async (req, res) => {
-  try {
-    const { user_id = 'anonymous', username = 'User', age, height_cm, weight_kg, gender = 'male', activity_description } = req.body;
-    
-    if (!activity_description) return res.status(400).json({ error: 'activity_description is required' });
-
-    // Use Groq to determine the activity multiplier and TDEE based on the description
-    const prompt = `Un usuario de ${age} años, ${height_cm} cm, ${weight_kg} kg, género ${gender}. Describe su semana promedio así: "${activity_description}". 
-Usa la ecuación de Mifflin-St Jeor para calcular su BMR y luego estima su multiplicador de actividad física (usualmente entre 1.2 sedentario y 1.9 atleta profesional) basándote en su descripción.
-Responde ÚNICAMENTE con un JSON válido con este formato: {"activity_multiplier": 1.55, "tdee_kcal": 2500}. No incluyas ningún otro texto o markdown.`;
-
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "llama-3.1-8b-instant",
-    });
-
-    let aiResponse;
-    try {
-        const textResponse = chatCompletion.choices[0].message.content.trim();
-        // Sometimes the AI wraps it in markdown like ```json ... ```
-        const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-        aiResponse = JSON.parse(jsonMatch ? jsonMatch[0] : textResponse);
-    } catch (e) {
-        console.error('Error parsing Groq JSON:', e);
-        return res.status(500).json({ error: 'AI failed to determine activity level' });
-    }
-
-    const { activity_multiplier, tdee_kcal } = aiResponse;
-
-    // Update or insert profile
-    const { data, error } = await supabase.from('user_profiles').upsert([{ 
-        user_id, username, gender, age, height_cm, weight_kg, activity_multiplier, tdee_kcal, updated_at: new Date().toISOString()
-    }]).select();
+    const analysis = await analyzeFood(foodText);
+    const { data, error } = await supabase
+      .from('daily_logs')
+      .insert({ user_id: userId, food_text: foodText, parsed_data: analysis })
+      .select('id, food_text, parsed_data, logged_at')
+      .single();
 
     if (error) throw error;
 
-    res.json({ success: true, data, message: `Groq analizó la semana de ${username} y asignó un multiplicador de ${activity_multiplier} (TDEE: ${tdee_kcal} kcal).` });
+    const summary = await getDailySummary();
+    return res.status(201).json({
+      entry: {
+        id: data.id,
+        foodText: data.food_text,
+        loggedAt: data.logged_at,
+        foods: data.parsed_data.foods,
+        totals: data.parsed_data.totals,
+      },
+      summary,
+    });
   } catch (error) {
-    console.error('Error in profile setup:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
+    console.error('Could not save food log:', error.message);
+    const isDatabaseError = error.message.includes('daily_logs') || error.message.includes('parsed_data');
+    return res.status(isDatabaseError ? 500 : 502).json({
+      error: isDatabaseError ? databaseMessage(error) : 'Groq no pudo analizar la comida. Inténtalo de nuevo.',
+    });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend avanzado corriendo en http://localhost:${PORT}`);
+app.listen(port, () => {
+  console.log(`Eatbud API escuchando en http://localhost:${port}`);
 });

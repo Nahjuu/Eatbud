@@ -1,27 +1,49 @@
-# Eatbud 🥗🤖
+# Eatbud
 
-Eatbud is an AI-powered smart calorie and food tracking application. Instead of manually counting calories and trying to understand complex nutritional labels, you simply write down what you ate in plain text (e.g., "1 large apple, 100g chicken breast"). Eatbud processes your daily logs and utilizes advanced AI models to give you instant, personalized daily nutritional insights and comprehensive weekly summaries.
+Aplicación simple para registrar comidas en lenguaje natural. El backend envía el texto a Groq, guarda el desglose nutricional en Supabase y devuelve el total del día.
 
-## ✨ Features
+## Estructura
 
-- **Natural Language Logging:** Log your food exactly how you speak. No need to search through endless databases.
-- **AI Daily Insights:** Get immediate feedback on your daily macronutrient balance and eating habits.
-- **Weekly Performance Reviews:** Receive an automated weekly summary with actionable goals to improve your diet.
-- **Smart Data Management:** Old daily logs are automatically compiled and purged after the weekly review, keeping the system fast and clutter-free.
+- `frontend/`: interfaz React y Vite.
+- `backend/`: API Express, Groq y Supabase.
+- `backend/schema.sql`: única tabla necesaria para el proyecto.
 
-## 🚀 Tech Stack
+## Configuración inicial
 
-Eatbud is built as a modern Full-Stack web application:
+1. En Supabase, abre **SQL Editor** y ejecuta [`backend/schema.sql`](backend/schema.sql). El script no borra datos.
+2. Copia `backend/.env.example` a `backend/.env` y completa las credenciales de Supabase y Groq. La clave `SUPABASE_SERVICE_ROLE_KEY` debe permanecer únicamente en el backend.
+3. Instala las dependencias desde cada proyecto:
 
-### Frontend
-- **React** (powered by Vite) for a blazing fast, interactive user interface.
-- **Tailwind CSS** for clean, responsive, and modern styling.
+   ```bash
+   npm install
+   npm install --prefix backend
+   npm install --prefix frontend
+   ```
 
-### Backend & Infrastructure
-- **Node.js & Express:** A robust REST API that handles data processing and securely communicates with external AI services.
-- **Supabase (PostgreSQL):** A highly scalable cloud database for secure user data and logging history.
-- **Groq API (Llama 3.1):** State-of-the-art Large Language Model (LLM) used to analyze the nutritional value of raw food logs in milliseconds.
+4. Inicia frontend y backend juntos:
 
-## 💡 The Goal
+   ```bash
+   npm run dev
+   ```
 
-This project was built to solve the friction of traditional calorie tracking apps. By leveraging the speed of Groq and the reasoning capabilities of Llama 3, Eatbud removes the tediousness of manual data entry, providing a seamless and intelligent health-tracking experience.
+Abre `http://localhost:5173`.
+
+## Variables de entorno
+
+| Variable | Uso |
+| --- | --- |
+| `PORT` | Puerto de la API; por defecto `3000`. |
+| `FRONTEND_URL` | Origen permitido por CORS; por defecto `http://localhost:5173`. |
+| `SUPABASE_URL` | URL del proyecto de Supabase. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave privada usada solo por la API. |
+| `GROQ_API_KEY` | Clave de Groq. |
+| `GROQ_MODEL` | Opcional; por defecto `groq/compound-mini`. |
+| `VITE_API_URL` | Opcional, en `frontend/.env`; URL pública de la API al publicar frontend y backend por separado. |
+
+`groq/compound-mini` permite que Groq decida si necesita buscar en la web para resolver productos o preparaciones ambiguas. El modelo devuelve un JSON con alimentos, kcal, proteína, carbohidratos y grasas; la API suma esos datos para formar el reporte diario.
+
+## API
+
+- `GET /api/health`: comprueba conexión con la tabla `daily_logs`.
+- `GET /api/daily-summary`: devuelve las comidas y macros del día actual.
+- `POST /api/logs`: recibe `{ "foodText": "..." }`, analiza con Groq, guarda y devuelve el nuevo resumen diario.
