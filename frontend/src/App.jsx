@@ -6,6 +6,48 @@ const emptySummary = {
   entries: [],
 };
 
+// 1. Create a dictionary for your translations
+const translations = {
+  es: {
+    eyebrow: 'EATBUD',
+    title: 'Tu alimentación, clara y simple.',
+    intro: 'Escribe lo que comiste. Groq estima los nutrientes y se guarda en tu resumen diario.',
+    calToday: 'Calorías de hoy',
+    protein: 'Proteína',
+    carbs: 'Carbohidratos',
+    fat: 'Grasas',
+    whatDidYouEat: '¿Qué comiste?',
+    placeholder: 'Ej.: 200 g de pollo a la plancha, arroz y una manzana',
+    analyzing: 'Analizando y guardando…',
+    saveFood: 'Guardar comida',
+    todayLog: 'Registro de hoy',
+    refresh: 'Actualizar',
+    emptyLog: 'Todavía no registraste comidas hoy.',
+    errorLoad: 'No se pudo cargar el resumen del día.',
+    errorSave: 'No se pudo guardar la comida.',
+    langBtn: 'English'
+  },
+  en: {
+    eyebrow: 'EATBUD',
+    title: 'Your nutrition, clear and simple.',
+    intro: 'Write down what you ate. Groq estimates the nutrients and saves them to your daily summary.',
+    calToday: "Today's Calories",
+    protein: 'Protein',
+    carbs: 'Carbs',
+    fat: 'Fat',
+    whatDidYouEat: 'What did you eat?',
+    placeholder: 'E.g.: 200g of grilled chicken, rice, and an apple',
+    analyzing: 'Analyzing and saving...',
+    saveFood: 'Save food',
+    todayLog: "Today's Log",
+    refresh: 'Refresh',
+    emptyLog: "You haven't logged any food today.",
+    errorLoad: "Could not load today's summary.",
+    errorSave: 'Could not save the food.',
+    langBtn: 'Español'
+  }
+};
+
 function format(value) {
   return Math.round(value || 0);
 }
@@ -24,21 +66,30 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // 2. Add state for the selected language
+  const [lang, setLang] = useState('es');
+  const t = translations[lang]; // Shortcut for current dictionary
+
+  // 3. Toggle function for the button
+  const toggleLanguage = () => {
+    setLang((prev) => (prev === 'es' ? 'en' : 'es'));
+    setError(''); // Clear errors on language switch to avoid translating old errors
+  };
+
   const loadSummary = async () => {
     setError('');
-
     try {
       setSummary(await requestSummary());
     } catch (requestError) {
-      setError(requestError.message || 'No se pudo cargar el resumen del día.');
+      setError(requestError.message || t.errorLoad);
     }
   };
 
   useEffect(() => {
     requestSummary()
       .then(setSummary)
-      .catch((requestError) => setError(requestError.message || 'No se pudo cargar el resumen del día.'));
-  }, []);
+      .catch((requestError) => setError(requestError.message || t.errorLoad));
+  }, [lang]); // Added lang dependency so default error language updates
 
   const saveFood = async (event) => {
     event.preventDefault();
@@ -61,7 +112,7 @@ function App() {
       setSummary(data.summary);
       setFoodText('');
     } catch (requestError) {
-      setError(requestError.message || 'No se pudo guardar la comida.');
+      setError(requestError.message || t.errorSave);
     } finally {
       setSaving(false);
     }
@@ -72,35 +123,42 @@ function App() {
   return (
     <main className="page">
       <header className="header">
-        <p className="eyebrow">EATBUD</p>
-        <h1>Tu alimentación, clara y simple.</h1>
-        <p className="intro">Escribe lo que comiste. Groq estima los nutrientes y se guarda en tu resumen diario.</p>
+        {/* Language Toggle Button */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+          <button type="button" onClick={toggleLanguage} className="link-button">
+            {t.langBtn}
+          </button>
+        </div>
+
+        <p className="eyebrow">{t.eyebrow}</p>
+        <h1>{t.title}</h1>
+        <p className="intro">{t.intro}</p>
       </header>
 
       <section className="summary" aria-label="Resumen diario">
         <div className="calories">
-          <span>Calorías de hoy</span>
+          <span>{t.calToday}</span>
           <strong>{format(totals.calories)} <small>kcal</small></strong>
         </div>
         <div className="macros">
-          <div><span>Proteína</span><strong>{format(totals.protein)} g</strong></div>
-          <div><span>Carbohidratos</span><strong>{format(totals.carbs)} g</strong></div>
-          <div><span>Grasas</span><strong>{format(totals.fat)} g</strong></div>
+          <div><span>{t.protein}</span><strong>{format(totals.protein)} g</strong></div>
+          <div><span>{t.carbs}</span><strong>{format(totals.carbs)} g</strong></div>
+          <div><span>{t.fat}</span><strong>{format(totals.fat)} g</strong></div>
         </div>
       </section>
 
       <form className="food-form" onSubmit={saveFood}>
-        <label htmlFor="food">¿Qué comiste?</label>
+        <label htmlFor="food">{t.whatDidYouEat}</label>
         <textarea
           id="food"
           value={foodText}
           onChange={(event) => setFoodText(event.target.value)}
-          placeholder="Ej.: 200 g de pollo a la plancha, arroz y una manzana"
+          placeholder={t.placeholder}
           maxLength="2000"
           disabled={saving}
         />
         <button type="submit" disabled={saving || !foodText.trim()}>
-          {saving ? 'Analizando y guardando…' : 'Guardar comida'}
+          {saving ? t.analyzing : t.saveFood}
         </button>
       </form>
 
@@ -108,8 +166,8 @@ function App() {
 
       <section className="history">
         <div className="section-title">
-          <h2>Registro de hoy</h2>
-          <button type="button" className="link-button" onClick={loadSummary}>Actualizar</button>
+          <h2>{t.todayLog}</h2>
+          <button type="button" className="link-button" onClick={loadSummary}>{t.refresh}</button>
         </div>
 
         {entries.length ? (
@@ -120,7 +178,11 @@ function App() {
                   <div>
                     <h3>{entry.foodText}</h3>
                     <time dateTime={entry.loggedAt}>
-                      {new Date(entry.loggedAt).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}
+                      {/* Dynamic time formatting based on language */}
+                      {new Date(entry.loggedAt).toLocaleTimeString(lang === 'es' ? 'es-UY' : 'en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
                     </time>
                   </div>
                   <strong>{format(entry.totals.calories)} kcal</strong>
@@ -130,7 +192,8 @@ function App() {
                   {entry.foods.map((food, index) => (
                     <li key={`${entry.id}-${index}`}>
                       <span>{food.name} · {format(food.quantity)} {food.unit}</span>
-                      <span>{format(food.protein)} P · {format(food.carbs)} C · {format(food.fat)} G</span>
+                      {/* Using first letters for macros: P, C, F (Fat/Grasas) */}
+                      <span>{format(food.protein)} P · {format(food.carbs)} C · {format(food.fat)} {lang === 'es' ? 'G' : 'F'}</span>
                     </li>
                   ))}
                 </ul>
@@ -138,7 +201,7 @@ function App() {
             ))}
           </div>
         ) : (
-          <p className="empty">Todavía no registraste comidas hoy.</p>
+          <p className="empty">{t.emptyLog}</p>
         )}
       </section>
     </main>
