@@ -1,18 +1,26 @@
 # Eatbud
 
-Aplicación simple para registrar comidas en lenguaje natural. El backend envía el texto a Groq, guarda el desglose nutricional en Supabase y devuelve el total del día.
+[svg](https://github.com/Nahjuu/Eatbud#eatbud)
 
-## Estructura
+A simple application for logging meals using natural language. The backend sends the food description to Groq, stores the nutritional breakdown in Supabase, and returns the user's daily total.
 
-- `frontend/`: interfaz React y Vite.
-- `backend/`: API Express, Groq y Supabase.
-- `backend/schema.sql`: única tabla necesaria para el proyecto.
+## Structure
 
-## Configuración inicial
+[svg](https://github.com/Nahjuu/Eatbud#structure)
 
-1. En Supabase, abre **SQL Editor** y ejecuta [`backend/schema.sql`](backend/schema.sql). El script no borra datos.
-2. Copia `backend/.env.example` a `backend/.env` y completa las credenciales de Supabase y Groq. La clave `SUPABASE_SERVICE_ROLE_KEY` debe permanecer únicamente en el backend.
-3. Instala las dependencias desde cada proyecto:
+* `frontend/`: React and Vite interface.
+* `backend/`: Express API, Groq, and Supabase.
+* `backend/schema.sql`: database schema required by the project.
+
+## Initial Setup
+
+[svg](https://github.com/Nahjuu/Eatbud#initial-setup)
+
+1. In Supabase, open the **SQL Editor** and run [`backend/schema.sql`](https://github.com/Nahjuu/Eatbud/blob/main/backend/schema.sql). The script does not delete existing data.
+
+2. Copy `backend/.env.example` to `backend/.env` and fill in the Supabase and Groq credentials. The `SUPABASE_SERVICE_ROLE_KEY` must remain on the backend only.
+
+3. Install the dependencies from each project:
 
    ```bash
    npm install
@@ -20,30 +28,38 @@ Aplicación simple para registrar comidas en lenguaje natural. El backend envía
    npm install --prefix frontend
    ```
 
-4. Inicia frontend y backend juntos:
+   **svg**
+
+4. Start the frontend and backend together:
 
    ```bash
    npm run dev
    ```
 
-Abre `http://localhost:5173`.
+   **svg**
 
-## Variables de entorno
+Open `http://localhost:5173`.
 
-| Variable | Uso |
-| --- | --- |
-| `PORT` | Puerto de la API; por defecto `3000`. |
-| `FRONTEND_URL` | Origen permitido por CORS; por defecto `http://localhost:5173`. |
-| `SUPABASE_URL` | URL del proyecto de Supabase. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Clave privada usada solo por la API. |
-| `GROQ_API_KEY` | Clave de Groq. |
-| `GROQ_MODEL` | Opcional; por defecto `groq/compound-mini`. |
-| `VITE_API_URL` | Opcional, en `frontend/.env`; URL pública de la API al publicar frontend y backend por separado. |
+## Environment Variables
 
-`groq/compound-mini` permite que Groq decida si necesita buscar en la web para resolver productos o preparaciones ambiguas. El modelo devuelve un JSON con alimentos, kcal, proteína, carbohidratos y grasas; la API suma esos datos para formar el reporte diario.
+[svg](https://github.com/Nahjuu/Eatbud#environment-variables)
+
+| **Variable**                | **Usage**                                                                                            |
+| --------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PORT`                      | API port; defaults to `3000`.                                                                        |
+| `FRONTEND_URL`              | Allowed CORS origin; defaults to `http://localhost:5173`.                                            |
+| `SUPABASE_URL`              | Supabase project URL.                                                                                |
+| `SUPABASE_SERVICE_ROLE_KEY` | Private key used only by the API.                                                                    |
+| `GROQ_API_KEY`              | Groq API key.                                                                                        |
+| `GROQ_MODEL`                | Optional; defaults to `groq/compound-mini`.                                                          |
+| `VITE_API_URL`              | Optional, in `frontend/.env`; the public API URL when deploying the frontend and backend separately. |
+
+`groq/compound-mini` allows Groq to decide whether it needs to search the web to resolve ambiguous products or preparations. The model returns JSON containing foods, calories, protein, carbohydrates, and fat; the API sums these values to generate the daily report.
 
 ## API
 
-- `GET /api/health`: comprueba conexión con la tabla `daily_logs`.
-- `GET /api/daily-summary`: devuelve las comidas y macros del día actual.
-- `POST /api/logs`: recibe `{ "foodText": "..." }`, analiza con Groq, guarda y devuelve el nuevo resumen diario.
+[svg](https://github.com/Nahjuu/Eatbud#api)
+
+* `GET /api/health`: checks the connection to the `daily_logs` table.
+* `GET /api/daily-summary`: returns the current day's meals and macros.
+* `POST /api/logs`: receives `{ "foodText": "..." }`, analyzes it with Groq, saves it, and returns the updated daily summary.
