@@ -28,3 +28,25 @@ alter table public.daily_logs
 
 create index if not exists daily_logs_user_logged_at_idx
   on public.daily_logs (user_id, logged_at desc);
+
+-- Nueva tabla de perfiles
+create table if not exists public.profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  name text not null,
+  date_of_birth date not null,
+  weight_kg numeric not null,
+  height_cm numeric not null,
+  sex text not null,
+  weekly_activity_description text not null,
+  goal text not null,
+  avatar_url text,
+  daily_calorie_goal integer,
+  calorie_goal_updated_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Migración para añadir meta calórica a perfiles existentes si la tabla ya fue creada
+alter table public.profiles
+  add column if not exists daily_calorie_goal integer,
+  add column if not exists calorie_goal_updated_at timestamptz;

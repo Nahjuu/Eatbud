@@ -30,6 +30,12 @@ A simple application for logging meals using natural language. The backend sends
 
 Open `http://localhost:5173`.
 
+## Confirmation emails
+
+Account confirmation emails are sent by **Supabase Auth**, directly from the browser; they do not pass through `backend/`. In the Supabase dashboard, configure **Authentication → Email** with a verified custom SMTP provider before production. The built-in Supabase mail service is intended for testing and has tight rate limits and delivery restrictions. Also add the deployed frontend URL (and `http://localhost:5173` for local development) under **Authentication → URL Configuration → Redirect URLs**.
+
+The sign-in screen includes a **Resend confirmation email** action. For existing accounts, use that action instead of registering again.
+
 ## Environment Variables
 
 | Variable                    | Usage                                                                                            |
