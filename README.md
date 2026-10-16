@@ -50,7 +50,7 @@ The sign-in screen includes a **Resend confirmation email** action. For existing
 | `DEEPSEEK_MODEL`            | Optional; defaults to `deepseek-chat`.                                                          |
 | `VITE_API_URL`              | Optional, in `frontend/.env`; public API URL when deploying the frontend and backend separately. |
 
-The backend analyzes each food with a Groq model that has built-in browser search (`openai/gpt-oss-120b` by default). It searches the web only for ambiguous foods (prepared/restaurant meals, brands, unclear portions), then returns JSON with foods, calories, protein, carbohydrates and fat; the API sums these values to generate the daily report. If Groq fails (token limit, outage or validation error), it automatically retries with DeepSeek (`deepseek-chat`), which answers from its nutritional knowledge without web search.
+The backend analyzes each food with Groq (`openai/gpt-oss-120b` by default) and returns JSON with foods, calories, protein, carbohydrates and fat; the API sums these values to generate the daily report. The model works **without web search**: it estimates each food from reference nutritional values (USDA per 100 g) and standard portion weights, which keeps every request at roughly 1.3k tokens. If Groq fails (token limit, outage or validation error), it automatically retries with DeepSeek (`deepseek-chat`).
 
 ## API
 

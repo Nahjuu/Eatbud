@@ -419,31 +419,22 @@ async function reconcilePastDays(userId) {
 }
 
 /**
- * Construye el prompt del analizador nutricional. `webSearch` indica si el
- * modelo dispone de la búsqueda web integrada (Groq) o no (DeepSeek).
+ * Prompt del analizador nutricional. El modelo NO tiene búsqueda web: estima
+ * siempre con su conocimiento nutricional de referencia (valores USDA por 100 g
+ * y tablas estándar de composición de alimentos).
  */
-function buildFoodAnalysisPrompt({ webSearch }) {
-  const searchRules = webSearch
-    ? `4. Busca en la web SOLO cuando el alimento sea ambiguo o difícil de estimar: comidas preparadas o de restaurante, platos regionales, marcas o productos comerciales, o cantidades inciertas. En ese caso haz UNA sola búsqueda que abarque todo lo dudoso y responde de inmediato, sin repetir ni verificar dos veces.
-5. Si el alimento es común y conocido (pollo, arroz, huevo, manzana, etc.) y la cantidad está clara, NO busques: responde directamente con tu conocimiento nutricional.`
-    : `4. No tienes búsqueda web disponible: estima los valores con tu conocimiento nutricional de referencia (USDA y tablas estándar).
-5. Sé realista y prudente con las estimaciones, sobre todo en comidas preparadas o de restaurante.`;
-
-  return `Eres un nutricionista experto. Analiza el texto que describe una o varias comidas y devuelve el desglose nutricional de CADA alimento por separado.
+const FOOD_ANALYSIS_SYSTEM_PROMPT = `Eres un nutricionista experto. Analiza el texto que describe una o varias comidas y devuelve el desglose nutricional de CADA alimento por separado.
 
 Reglas:
 1. Respeta EXACTAMENTE la cantidad indicada (gramos, ml, tazas, cucharadas, unidades o porciones). Si no se indica cantidad, asume una porción estándar.
-2. Convierte medidas caseras (taza, cucharada, cucharadita, plato, porción, unidad mediana, etc.) a su equivalente en gramos usando referencias nutricionales estándar.
+2. Convierte medidas caseras (taza, cucharada, cucharadita, plato, porción, unidad mediana, etc.) a su equivalente en gramos usando pesos de referencia estándar (1 huevo ≈ 50 g, 1 taza de arroz cocido ≈ 158 g, 1 cucharada de aceite ≈ 14 g, 1 rebanada de pan ≈ 30 g, etc.).
 3. Los valores de calories, protein, carbs y fat deben ser para la CANTIDAD TOTAL indicada, NO por cada 100 g.
-${searchRules}
+4. No tienes acceso a internet ni a búsqueda web: estima cada alimento con tu conocimiento nutricional de referencia (valores USDA por 100 g y tablas estándar de composición de alimentos) y multiplícalos por la cantidad indicada.
+5. Para comidas preparadas, de restaurante, platos regionales o productos de marca, haz tu mejor estimación a partir de sus ingredientes y técnicas de cocción típicas, con porciones realistas y prudentes.
 6. "protein", "carbs" y "fat" van en GRAMOS (nunca en porcentaje).
 7. Coherencia macro-calórica: 1 g de proteína ≈ 4 kcal, 1 g de carbohidrato ≈ 4 kcal, 1 g de grasa ≈ 9 kcal. La suma aproximada debe coincidir con las calorías.
-8. La respuesta final debe ser SIEMPRE el JSON como texto plano de la respuesta, NUNCA como llamada a una herramienta o función (no inventes herramientas). Responde directo y conciso: sin explicaciones, sin narraciones, sin markdown y sin citas. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta:
+8. Devuelve SIEMPRE el JSON como texto plano de la respuesta, NUNCA como llamada a una herramienta o función (no inventes herramientas). Responde directo y conciso: sin explicaciones, sin narraciones, sin markdown y sin citas. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta:
 {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}`;
-}
-
-const FOOD_ANALYSIS_SYSTEM_PROMPT = buildFoodAnalysisPrompt({ webSearch: true });
-const FOOD_ANALYSIS_SYSTEM_PROMPT_NO_SEARCH = buildFoodAnalysisPrompt({ webSearch: false });
 
 /**
  * Analiza el texto de la comida. Usa Groq (con búsqueda web integrada) y, si
@@ -476,12 +467,12 @@ async function analyzeWithGroq(foodText) {
         { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT },
         { role: 'user', content: foodText },
       ],
-      // Búsqueda en la web integrada (solo disponible en los modelos GPT-OSS).
-      // 'auto' deja que el modelo busque únicamente cuando el alimento es ambiguo
-      // (comidas preparadas, marcas, cantidades inciertas) y responda directo con
-      // alimentos comunes, lo que reduce mucho la latencia.
-      tools: [{ type: 'browser_search' }],
-      tool_choice: 'auto',
+      // Sin búsqueda web: el análisis es puramente estimativo, así que forzamos
+      // la salida JSON y pedimos el mínimo razonamiento posible. Los modelos
+      // gpt-oss gastan tokens "pensando" antes de responder; 'low' recorta ese
+      // gasto sin afectar la estimación nutricional.
+      response_format: { type: 'json_object' },
+      ...(/gpt-oss/i.test(model) ? { reasoning_effort: 'low' } : {}),
     });
     return parseAnalysis(completion.choices[0]?.message?.content || '');
   } catch (err) {
@@ -505,7 +496,7 @@ async function analyzeWithDeepSeek(foodText) {
     body: JSON.stringify({
       model: DEEPSEEK_MODEL,
       messages: [
-        { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT_NO_SEARCH },
+        { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT },
         { role: 'user', content: foodText },
       ],
       response_format: { type: 'json_object' },
