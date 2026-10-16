@@ -448,14 +448,16 @@ function WeeklyDashboard({ lang, t, session, profile }) {
   const [editText, setEditText] = useState('');
   const [updating, setUpdating] = useState(false);
 
-  // Comparativo semanal: la meta diaria cubre los 7 días de la semana, así que
-  // la meta semanal y el margen de 300 kcal se multiplican por 7 (misma
-  // proporción que en el día).
+  // Comparativo semanal: sólo cuentan los días que tienen comidas, así que la
+  // meta del período es la meta diaria por la cantidad de días con comidas y el
+  // margen de 300 kcal por esa misma cantidad (misma proporción que en el día).
+  // Si la semana no tiene comidas no se muestra ningún comparativo.
   const dailyGoal = profile?.daily_calorie_goal;
+  const loggedDays = (data?.days || []).filter((day) => day.entries && day.entries.length > 0).length;
   const weekStatus = getGoalStatus(
     data?.totals?.calories,
-    dailyGoal ? dailyGoal * 7 : 0,
-    OVER_LIMIT_KCAL * 7
+    dailyGoal && loggedDays > 0 ? dailyGoal * loggedDays : 0,
+    OVER_LIMIT_KCAL * loggedDays
   );
 
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Montevideo' });
@@ -472,13 +474,8 @@ function WeeklyDashboard({ lang, t, session, profile }) {
       .then(({ ok, d }) => {
         if (!ok) throw new Error(d.error);
         setData(d);
-        // Expandir por defecto todos los días que contengan comidas
-        const daysWithMeals = new Set(
-          (d.days || [])
-            .filter((day) => day.entries && day.entries.length > 0)
-            .map((day) => day.date)
-        );
-        setExpandedDays(daysWithMeals);
+        // Los días arrancan colapsados: cada uno se despliega al tocarlo.
+        setExpandedDays(new Set());
       })
       .catch((err) => setError(err.message || t.errorLoad))
       .finally(() => setLoading(false));
@@ -633,6 +630,9 @@ function WeeklyDashboard({ lang, t, session, profile }) {
                       <GoalComparison status={weekStatus} className="text-2xl" smallClassName="text-base">
                         <small className="text-xs font-semibold text-[#a8bdb6]"> kcal</small>
                       </GoalComparison>
+                      <p className="mt-1 text-[.72rem] text-[#a8bdb6]">
+                        {loggedDays} {loggedDays === 1 ? t.dayWithMeals : t.daysWithMeals} × {format(dailyGoal)} kcal
+                      </p>
                       <p className={`mt-2 text-[.85rem] font-semibold ${weekStatus.textClass}`}>
                         {weekStatus.diff <= 0 ? t.weeklyDeficit : t.weeklyExcess}: {format(Math.abs(weekStatus.diff))} kcal
                       </p>
