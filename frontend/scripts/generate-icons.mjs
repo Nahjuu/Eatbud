@@ -124,10 +124,15 @@ function removeWhiteBackground(image) {
   return image;
 }
 
-// ─── Recorte al cuadrado del dibujo ──────────────────────────────────────────
-// El logo trae margen blanco alrededor; se recorta al rectángulo de píxeles
-// opacos (con un pequeño respiro) para que el dibujo ocupe el icono entero.
-const PADDING = 0.02; // 2% extra por lado, para que no toque el borde
+// ─── Recorte al dibujo ───────────────────────────────────────────────────────
+// El logo trae un margen blanco alrededor (unos 40 px en el original) y una
+// banda fina de mezcla en el borde. Se recorta a la caja de los píxeles ya
+// sólidos (alfa alto), no a los mezclados: así el dibujo toca los cuatro bordes
+// del icono, sin marco transparente alrededor, y la banda mezclada con el
+// blanco (que sobre un fondo oscuro se vería como un reborde claro) se queda
+// fuera. Si el dibujo no fuese exactamente cuadrado, la reducción de tamaño lo
+// ajusta a cada eje por separado (la diferencia es menor del 2%, no se aprecia).
+const SOLID_ALPHA = 0.9;
 
 function cropToArtwork(image) {
   const { width, height, pixels } = image;
@@ -137,7 +142,7 @@ function cropToArtwork(image) {
   let bottom = -1;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (pixels[(y * width + x) * 4 + 3] < 0.35) continue;
+      if (pixels[(y * width + x) * 4 + 3] < SOLID_ALPHA) continue;
       if (x < left) left = x;
       if (x > right) right = x;
       if (y < top) top = y;
@@ -146,22 +151,13 @@ function cropToArtwork(image) {
   }
   if (right < 0) throw new Error('El origen no tiene ningún píxel opaco.');
 
-  const side = Math.max(right - left + 1, bottom - top + 1);
-  const margin = Math.round(side * PADDING);
-  const size = side + margin * 2;
-  const centreX = (left + right) / 2;
-  const centreY = (top + bottom) / 2;
-  const originX = Math.round(centreX - size / 2);
-  const originY = Math.round(centreY - size / 2);
-
-  const cropped = { width: size, height: size, pixels: new Float32Array(size * size * 4) };
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const sourceX = originX + x;
-      const sourceY = originY + y;
-      if (sourceX < 0 || sourceY < 0 || sourceX >= width || sourceY >= height) continue;
-      const from = (sourceY * width + sourceX) * 4;
-      const to = (y * size + x) * 4;
+  const cropWidth = right - left + 1;
+  const cropHeight = bottom - top + 1;
+  const cropped = { width: cropWidth, height: cropHeight, pixels: new Float32Array(cropWidth * cropHeight * 4) };
+  for (let y = 0; y < cropHeight; y++) {
+    for (let x = 0; x < cropWidth; x++) {
+      const from = ((top + y) * width + (left + x)) * 4;
+      const to = (y * cropWidth + x) * 4;
       for (let channel = 0; channel < 4; channel++) cropped.pixels[to + channel] = pixels[from + channel];
     }
   }
@@ -467,12 +463,18 @@ function glyphRadius(image) {
 }
 
 // ─── Iconos a generar ────────────────────────────────────────────────────────
+// `bleed: true` son los que recorta el sistema (Android maskable, iOS): se
+// rellena el fondo para que no queden esquinas transparentes. `bleed: false`
+// son los de "esquinas transparentes", que se ven tal cual: el icono de la PWA
+// en Android/escritorio, el favicon y el logotipo pequeño que la interfaz usa
+// junto al nombre de la marca.
 const ICONS = [
   { file: 'icons/icon-192.png', size: 192, bleed: false },
   { file: 'icons/icon-512.png', size: 512, bleed: false },
   { file: 'icons/maskable-512.png', size: 512, bleed: true },
   { file: 'apple-touch-icon.png', size: 180, bleed: true },
   { file: 'favicon-32.png', size: 32, bleed: false },
+  { file: 'logo-mark.png', size: 128, bleed: false },
 ];
 
 const artwork = cropToArtwork(removeWhiteBackground(decodePng(SOURCE)));

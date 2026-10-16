@@ -85,7 +85,10 @@ export default function Login({ lang, setLanguage, t }) {
       </div>
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-dark-border bg-dark-surface shadow-2xl backdrop-blur-md animate-fade-in-up">
         <div className="border-b border-dark-border bg-[#0c3d31]/80 p-6 text-center sm:p-8">
-          <p className="mb-3 text-lg font-extrabold tracking-[.18em] text-brand">EATBUD</p>
+          <div className="mb-3 flex items-center justify-center gap-3">
+            <img src="/logo-mark.png" alt="" className="h-10 w-10" />
+            <p className="text-lg font-extrabold tracking-[.18em] text-brand">EATBUD</p>
+          </div>
           <h2 className="mb-2 text-3xl font-extrabold tracking-tight text-brand-light">{isRegistration ? t.registerTitle : t.loginTitle}</h2>
           <p className="text-sm text-slate-300">{isRegistration ? t.registerHint : t.loginPasswordHint}</p>
         </div>

@@ -16,7 +16,10 @@ export default function Sidebar({ lang, setLanguage, t, session, supabase, curre
           contenido no quede bajo la barra de estado cuando la app está
           instalada (iOS, status bar translúcida). */}
       <div className="flex w-full flex-shrink-0 items-center justify-between border-b border-dark-border bg-dark-bg px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:hidden">
-        <span className="font-extrabold tracking-[.18em] text-brand">EATBUD</span>
+        <span className="flex items-center gap-2.5 font-extrabold tracking-[.18em] text-brand">
+          <img src="/logo-mark.png" alt="" className="h-8 w-8" />
+          EATBUD
+        </span>
         <button onClick={() => setIsOpen(!isOpen)} className="flex h-10 w-10 items-center justify-center text-slate-300" aria-label="Menú">
           {isOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
@@ -25,7 +28,10 @@ export default function Sidebar({ lang, setLanguage, t, session, supabase, curre
       {/* Panel lateral: también respeta las áreas seguras (móvil instalado). */}
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-dark-bg border-r border-dark-border transform transition-transform duration-300 ease-in-out flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
         <div className="p-6 flex-shrink-0 flex justify-between items-center">
-          <span className="text-xl font-extrabold tracking-[.18em] text-brand">EATBUD</span>
+          <span className="flex items-center gap-3 text-xl font-extrabold tracking-[.18em] text-brand">
+            <img src="/logo-mark.png" alt="" className="h-9 w-9" />
+            EATBUD
+          </span>
           <div className="md:hidden">
             <button onClick={() => setIsOpen(false)} className="text-slate-400">
               <X size={20} />
