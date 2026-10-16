@@ -437,9 +437,9 @@ Reglas:
 {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}`;
 
 /**
- * Analiza el texto de la comida. Usa Groq (con búsqueda web integrada) y, si
- * Groq falla, cae al respaldo de DeepSeek. Sólo si ambos fallan se informa el
- * error genérico al usuario.
+ * Analiza el texto de la comida. Usa Groq como motor principal y, si Groq
+ * falla, cae al respaldo de DeepSeek. Sólo si ambos fallan se informa el error
+ * genérico al usuario. Ninguno de los dos usa búsqueda web.
  */
 async function analyzeFood(foodText) {
   try {
@@ -485,7 +485,7 @@ async function analyzeWithGroq(foodText) {
   }
 }
 
-// Respaldo con DeepSeek (API compatible con OpenAI, sin búsqueda web integrada).
+// Respaldo con DeepSeek (API compatible con OpenAI, sin búsqueda web).
 async function analyzeWithDeepSeek(foodText) {
   const response = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
     method: 'POST',
