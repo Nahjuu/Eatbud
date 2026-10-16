@@ -32,17 +32,24 @@ const TZ = 'America/Montevideo';
  */
 function localDateInTZ(instant = new Date()) {
   const d = instant instanceof Date ? instant : new Date(instant);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(d);
 
-  const y = parts.find((p) => p.type === 'year').value;
-  const m = parts.find((p) => p.type === 'month').value;
-  const dPart = parts.find((p) => p.type === 'day').value;
-  return `${y}-${m}-${dPart}`;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d);
+
+    const y = parts.find((p) => p.type === 'year').value;
+    const m = parts.find((p) => p.type === 'month').value;
+    const dPart = parts.find((p) => p.type === 'day').value;
+    return `${y}-${m}-${dPart}`;
+  } catch {
+    // Fallback: algunos runtimes serverless (Vercel) no incluyen los datos
+    // completos de zona horaria (ICU). Uruguay es UTC-3 todo el año.
+    return new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
 }
 
 /**
@@ -60,17 +67,25 @@ function dateRangeForLocalDay(dateStr) {
   }
 
   const [y, m, d] = value.split('-').map(Number);
-  const approx = Date.UTC(y, m - 1, d, 12, 0, 0);
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ,
-    timeZoneName: 'longOffset',
-  }).formatToParts(new Date(approx));
-  const tzName = parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT-03:00';
-  const match = tzName.match(/GMT([+-])(\d{2}):(\d{2})/);
-  const sign = match ? (match[1] === '+' ? 1 : -1) : -1;
-  const offsetMs = match
-    ? sign * (parseInt(match[2], 10) * 3600000 + parseInt(match[3], 10) * 60000)
-    : -3 * 3600000;
+  let offsetMs = -3 * 3600000;
+
+  try {
+    const approx = Date.UTC(y, m - 1, d, 12, 0, 0);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: TZ,
+      timeZoneName: 'longOffset',
+    }).formatToParts(new Date(approx));
+    const tzName = parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT-03:00';
+    const match = tzName.match(/GMT([+-])(\d{2}):(\d{2})/);
+    const sign = match ? (match[1] === '+' ? 1 : -1) : -1;
+    offsetMs = match
+      ? sign * (parseInt(match[2], 10) * 3600000 + parseInt(match[3], 10) * 60000)
+      : -3 * 3600000;
+  } catch {
+    // Fallback: si el runtime no expone los datos de zona horaria, asumimos
+    // el offset fijo de Uruguay (UTC-3, sin horario de verano).
+    offsetMs = -3 * 3600000;
+  }
 
   const startMs = Date.UTC(y, m - 1, d, 0, 0, 0) - offsetMs;
   const endMs = startMs + 24 * 60 * 60 * 1000;
@@ -1030,14 +1045,33 @@ function scheduleMidnightClosingUY() {
   return timer;
 }
 
+// ---------------------------------------------------------------------------
+// Arranque
+//
+// En Vercel la app se ejecuta como una única Vercel Function (Fluid compute):
+// Vercel importa el `app` exportado por defecto y se encarga del enrutado, así
+// que NO debemos abrir un puerto ni dejar temporizadores largos vivos. Hacerlo
+// durante el arranque hacía que el proceso del runtime se cayera y todas las
+// peticiones devolvieran FUNCTION_INVOCATION_FAILED.
+// ---------------------------------------------------------------------------
+const isVercel = Boolean(process.env.VERCEL);
+
 let serverInstance = null;
 let midnightTimer = null;
-if (process.env.NODE_ENV !== 'test') {
+
+if (!isVercel && process.env.NODE_ENV !== 'test') {
   serverInstance = app.listen(port, () => {
     console.log(`Eatbud API escuchando en http://localhost:${port}`);
-    midnightTimer = scheduleMidnightClosingUY();
+    try {
+      midnightTimer = scheduleMidnightClosingUY();
+    } catch (error) {
+      console.error('[Cierre Diario UY] No se pudo programar el cierre diario:', error.message);
+    }
   });
 }
+
+// Vercel detecta el handler de Express a partir del export por defecto.
+export default app;
 
 export {
   app,
