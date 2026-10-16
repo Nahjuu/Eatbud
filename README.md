@@ -41,7 +41,7 @@ The sign-in screen includes a **Resend confirmation email** action. For existing
 | Variable                    | Usage                                                                                            |
 | --------------------------- | ------------------------------------------------------------------------------------------------ |
 | `PORT`                      | API port; defaults to `3000`.                                                                    |
-| `FRONTEND_URL`              | Allowed CORS origin; defaults to `http://localhost:5173`.                                        |
+| `FRONTEND_URL`              | Extra allowed CORS origins (comma-separated). `http://localhost:5173` and `https://eatbud.vercel.app` are always allowed. |
 | `SUPABASE_URL`              | Supabase project URL.                                                                            |
 | `SUPABASE_SERVICE_ROLE_KEY` | Private key used only by the API.                                                                |
 | `GROQ_API_KEY`              | Groq API key.                                                                                    |
@@ -63,14 +63,19 @@ The frontend and the backend are deployed as **two separate Vercel projects**:
 * Frontend: `https://eatbud.vercel.app`
 * Backend: `https://eatbudbackend.vercel.app`
 
-Because they live on different domains, two environment variables must be set in the Vercel dashboard:
+Because they live on different domains, the frontend needs to know the backend URL and the backend needs to allow the frontend origin. Both are handled in code:
 
-| Vercel project | Variable        | Value                                |
-| -------------- | --------------- | ------------------------------------ |
-| Frontend       | `VITE_API_URL`  | `https://eatbudbackend.vercel.app/api` |
-| Backend        | `FRONTEND_URL`  | `https://eatbud.vercel.app`          |
+* `frontend/src/apiUrl.js` uses `/api` in development (through the Vite proxy) and `https://eatbudbackend.vercel.app/api` in production.
+* `backend/server.js` allows `http://localhost:5173` and `https://eatbud.vercel.app` by default.
 
-`VITE_*` variables are baked in at build time, so **redeploy the frontend after setting `VITE_API_URL`** — otherwise the deployed bundle keeps calling `/api` on its own domain, which has no backend and returns `404`.
+Optional Vercel environment variables, only needed to override those defaults:
 
-If neither variable is set, the frontend calls `/api` on its own domain and the backend only allows CORS requests from `http://localhost:5173`. `FRONTEND_URL` accepts a comma-separated list of origins to also allow Vercel preview deployments.
+| Vercel project | Variable        | Value                                          |
+| -------------- | --------------- | ---------------------------------------------- |
+| Frontend       | `VITE_API_URL`  | `https://eatbudbackend.vercel.app/api`         |
+| Backend        | `FRONTEND_URL`  | Extra origins, comma-separated (e.g. previews) |
+
+`VITE_*` variables are baked in at build time, so **redeploy the frontend after setting `VITE_API_URL`**.
+
+The backend runs as a single Vercel Function: `backend/server.js` exports the Express app as its default export and only calls `app.listen()` outside of Vercel, so the function never crashes on cold start.
 
