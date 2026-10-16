@@ -1,4 +1,4 @@
-import { Menu, X, Home, User } from 'lucide-react';
+import { Menu, X, Home, User, BarChart3 } from 'lucide-react';
 import { useState } from 'react';
 import LanguageSelector from './LanguageSelector';
 
@@ -41,6 +41,13 @@ export default function Sidebar({ lang, setLanguage, t, session, supabase, curre
             <Home size={20} />
             <span className="font-semibold">{t.home || 'Inicio'}</span>
           </button>
+          <button
+            onClick={() => { setCurrentView('summaries'); setIsOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${currentView === 'summaries' ? 'bg-dark-surface border border-brand/20 text-brand-light' : 'text-slate-300 hover:bg-dark-surface'}`}
+          >
+            <BarChart3 size={20} />
+            <span className="font-semibold">{t.summaries || 'Resúmenes'}</span>
+          </button>
         </nav>
 
         {session && profile && (
@@ -78,6 +85,34 @@ export default function Sidebar({ lang, setLanguage, t, session, supabase, curre
           onClick={() => setIsOpen(false)}
         />
       )}
+
+      {/* Barra de navegación inferior para móviles */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-dark-bg/95 backdrop-blur-md border-t border-dark-border px-4 py-2 flex items-center justify-around shadow-lg">
+        <button
+          type="button"
+          onClick={() => setCurrentView('home')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-lg transition-colors ${currentView === 'home' ? 'text-brand' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <Home size={20} />
+          <span className="text-[11px] font-semibold">{t.home || 'Inicio'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setCurrentView('summaries')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-lg transition-colors ${currentView === 'summaries' ? 'text-brand' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <BarChart3 size={20} />
+          <span className="text-[11px] font-semibold">{t.summaries || 'Resúmenes'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setCurrentView('profile')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-lg transition-colors ${currentView === 'profile' ? 'text-brand' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <User size={20} />
+          <span className="text-[11px] font-semibold">{t.profile || 'Perfil'}</span>
+        </button>
+      </div>
     </>
   );
 }
