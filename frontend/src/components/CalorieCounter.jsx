@@ -1,6 +1,5 @@
 import { useState } from 'react';
-
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
+import { apiUrl } from '../apiUrl';
 
 function format(value) {
   return Math.round(value || 0);

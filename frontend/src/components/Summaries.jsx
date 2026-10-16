@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Utensils, Flame, ChevronDown, ChevronUp, Trash2, Edit2 } from 'lucide-react';
-
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
+import { apiUrl } from '../apiUrl';
 
 function format(value) {
   return Math.round(value || 0);

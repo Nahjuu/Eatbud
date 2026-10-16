@@ -55,3 +55,22 @@ The sign-in screen includes a **Resend confirmation email** action. For existing
 * `GET /api/health`: checks the connection to the `daily_logs` table.
 * `GET /api/daily-summary`: returns the current day's meals and macros.
 * `POST /api/logs`: receives `{ "foodText": "..." }`, analyzes it with Groq, saves it, and returns the updated daily summary.
+
+## Deployment (Vercel)
+
+The frontend and the backend are deployed as **two separate Vercel projects**:
+
+* Frontend: `https://eatbud.vercel.app`
+* Backend: `https://eatbudbackend.vercel.app`
+
+Because they live on different domains, two environment variables must be set in the Vercel dashboard:
+
+| Vercel project | Variable        | Value                                |
+| -------------- | --------------- | ------------------------------------ |
+| Frontend       | `VITE_API_URL`  | `https://eatbudbackend.vercel.app/api` |
+| Backend        | `FRONTEND_URL`  | `https://eatbud.vercel.app`          |
+
+`VITE_*` variables are baked in at build time, so **redeploy the frontend after setting `VITE_API_URL`** — otherwise the deployed bundle keeps calling `/api` on its own domain, which has no backend and returns `404`.
+
+If neither variable is set, the frontend calls `/api` on its own domain and the backend only allows CORS requests from `http://localhost:5173`. `FRONTEND_URL` accepts a comma-separated list of origins to also allow Vercel preview deployments.
+

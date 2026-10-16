@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
+import { apiUrl } from '../apiUrl';
 
 function calculateAge(dateOfBirth) {
   if (!dateOfBirth) return '';

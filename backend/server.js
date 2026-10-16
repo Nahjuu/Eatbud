@@ -143,7 +143,21 @@ async function getUserFromReq(req) {
   return user.id;
 }
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+// FRONTEND_URL puede contener varias URLs separadas por comas (producción + previews de Vercel).
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Sin Origin (curl, server-to-server, mismo origen) siempre se permite.
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+}));
 app.use(express.json({ limit: '10kb' }));
 
 function number(value) {

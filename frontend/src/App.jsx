@@ -7,8 +7,7 @@ import Summaries from './components/Summaries';
 import { translations } from './translations';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { supabase } from './supabaseClient';
-
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
+import { apiUrl } from './apiUrl';
 
 function AppContent({ lang, setLanguage, t }) {
   const { session, loading: sessionLoading } = useContext(AuthContext);

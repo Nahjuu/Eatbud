@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Chat from './Chat';
 import CalorieCounter from './CalorieCounter';
-
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
+import { apiUrl } from '../apiUrl';
 const emptySummary = {
   totals: { calories: 0, protein: 0, carbs: 0, fat: 0 },
   entries: [],
