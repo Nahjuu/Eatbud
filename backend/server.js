@@ -418,8 +418,8 @@ Reglas:
 1. Respeta EXACTAMENTE la cantidad indicada (gramos, ml, tazas, cucharadas, unidades o porciones). Si no se indica cantidad, asume una porción estándar.
 2. Convierte medidas caseras (taza, cucharada, cucharadita, plato, porción, unidad mediana, etc.) a su equivalente en gramos usando referencias nutricionales estándar.
 3. Los valores de calories, protein, carbs y fat deben ser para la CANTIDAD TOTAL indicada, NO por cada 100 g.
-4. Usa la búsqueda web UNA SOLA VEZ: haz una única búsqueda que abarque todos los alimentos juntos. No hagas una búsqueda por alimento, no repitas búsquedas ni verifiques dos veces. Si ya conoces el valor de un alimento común, no necesitas buscarlo.
-5. Después de esa única búsqueda, calcula y responde de inmediato en un solo paso, sin iterar ni revisar de nuevo.
+4. Busca en la web SOLO cuando el alimento sea ambiguo o difícil de estimar: comidas preparadas o de restaurante, platos regionales, marcas o productos comerciales, o cantidades inciertas. En ese caso haz UNA sola búsqueda que abarque todo lo dudoso y responde de inmediato, sin repetir ni verificar dos veces.
+5. Si el alimento es común y conocido (pollo, arroz, huevo, manzana, etc.) y la cantidad está clara, NO busques: responde directamente con tu conocimiento nutricional.
 6. "protein", "carbs" y "fat" van en GRAMOS (nunca en porcentaje).
 7. Coherencia macro-calórica: 1 g de proteína ≈ 4 kcal, 1 g de carbohidrato ≈ 4 kcal, 1 g de grasa ≈ 9 kcal. La suma aproximada debe coincidir con las calorías.
 8. Responde directo y conciso: sin explicaciones, sin narraciones, sin markdown y sin citas. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta:
@@ -434,9 +434,11 @@ async function analyzeFood(foodText) {
         { role: 'user', content: foodText },
       ],
       // Búsqueda en la web integrada (solo disponible en los modelos GPT-OSS).
-      // Se fuerza para confirmar los valores nutricionales reales de cada alimento.
+      // 'auto' deja que el modelo busque únicamente cuando el alimento es ambiguo
+      // (comidas preparadas, marcas, cantidades inciertas) y responda directo con
+      // alimentos comunes, lo que reduce mucho la latencia.
       tools: [{ type: 'browser_search' }],
-      tool_choice: 'required',
+      tool_choice: 'auto',
     });
     return parseAnalysis(completion.choices[0]?.message?.content || '');
   } catch (err) {
