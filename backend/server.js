@@ -158,11 +158,17 @@ async function getUserFromReq(req) {
   return user.id;
 }
 
-// FRONTEND_URL puede contener varias URLs separadas por comas (producción + previews de Vercel).
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
-  .split(',')
-  .map((value) => value.trim())
-  .filter(Boolean);
+// Orígenes permitidos por defecto (desarrollo local + frontend de producción).
+// FRONTEND_URL puede añadir más URLs separadas por comas (por ejemplo, los
+// previews de Vercel), sin necesidad de tocar el código.
+const defaultOrigins = ['http://localhost:5173', 'https://eatbud.vercel.app'];
+const allowedOrigins = [
+  ...defaultOrigins,
+  ...(process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
+];
 
 app.use(cors({
   origin: (origin, callback) => {
