@@ -29,6 +29,21 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+// Modelo con visión de Groq. Sólo se usa cuando la comida se envía con una foto:
+// el modelo de texto por defecto no acepta imágenes. Se puede sobrescribir con
+// GROQ_VISION_MODEL.
+const visionModel = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b';
+
+// Tipos de imagen aceptados (los mismos que admite el proveedor de visión).
+const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+// El navegador reduce la foto antes de enviarla, así que este límite es holgado.
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const IMAGE_DATA_URL_PATTERN = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/;
+// Texto que se guarda cuando la comida es sólo una foto (la columna food_text es
+// obligatoria); es una etiqueta de interfaz, no un dato nutricional.
+const PHOTO_ONLY_LABEL = '📷 Foto de comida';
+// Texto que acompaña a la imagen cuando el usuario no escribió nada.
+const PHOTO_ONLY_INSTRUCTION = 'Estima la comida que se ve en la foto.';
 
 // ---------------------------------------------------------------------------
 // Zona horaria de referencia — todas las fechas locales se calculan en UY
@@ -188,7 +203,9 @@ app.use(cors({
     return callback(null, false);
   },
 }));
-app.use(express.json({ limit: '10kb' }));
+// Límite amplio porque el registro de comidas puede incluir una foto en base64
+// (el navegador la reduce antes de enviarla, así que el cuerpo real es pequeño).
+app.use(express.json({ limit: '8mb' }));
 
 function number(value) {
   const parsed = Number(value);
@@ -246,6 +263,52 @@ function parseAnalysis(content) {
   );
 
   return { foods: normalizedFoods, totals };
+}
+
+// ---------------------------------------------------------------------------
+// Validación de la foto adjunta (opcional)
+// ---------------------------------------------------------------------------
+
+/**
+ * Valida y normaliza la imagen opcional que llega junto a la comida.
+ * Acepta únicamente un data URL base64 de JPEG, PNG o WebP dentro del límite de
+ * tamaño. Devuelve `null` si no se envió imagen y lanza un error descriptivo si
+ * el valor recibido no es utilizable.
+ */
+function parseImagePayload(value) {
+  if (value === undefined || value === null || value === '') return null;
+
+  if (typeof value !== 'string') {
+    throw new Error('La imagen enviada no es válida.');
+  }
+
+  const match = IMAGE_DATA_URL_PATTERN.exec(value.trim());
+
+  if (!match) {
+    throw new Error('Formato de imagen no admitido. Usá una foto JPEG, PNG o WebP.');
+  }
+
+  const [, mimeType, base64] = match;
+
+  if (!ALLOWED_IMAGE_MIME_TYPES.includes(mimeType)) {
+    throw new Error('Formato de imagen no admitido. Usá una foto JPEG, PNG o WebP.');
+  }
+
+  const bytes = Math.floor((base64.length * 3) / 4);
+
+  if (bytes > MAX_IMAGE_BYTES) {
+    throw new Error('La imagen es demasiado grande. Probá con una foto más liviana.');
+  }
+
+  if (bytes < 128) {
+    throw new Error('La imagen está dañada o vacía. Probá con otra foto.');
+  }
+
+  return {
+    mimeType,
+    bytes,
+    dataUrl: `data:${mimeType};base64,${base64}`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -437,17 +500,37 @@ Reglas:
 {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}`;
 
 /**
- * Analiza el texto de la comida. Usa Groq como motor principal y, si Groq
- * falla, cae al respaldo de DeepSeek. Sólo si ambos fallan se informa el error
- * genérico al usuario. Ninguno de los dos usa búsqueda web.
+ * Instrucciones extra que se añaden al prompt sólo cuando la comida se envía con
+ * una foto. El texto y la imagen describen la MISMA comida: se interpretan
+ * juntos y producen un único desglose nutricional.
  */
-async function analyzeFood(foodText) {
+const FOOD_PHOTO_ANALYSIS_ADDENDUM = `
+
+Además del texto, recibes UNA FOTO de la comida. El texto y la foto describen la MISMA comida y debes interpretarlos juntos para producir UN ÚNICO desglose nutricional:
+- Usa el texto como contexto principal para identificar los alimentos, sus ingredientes y las cantidades (por ejemplo "es un sándwich de pollo con un poco de mayonesa").
+- Usa la foto como evidencia visual para confirmar o corregir qué alimentos hay, sus ingredientes visibles y el tamaño de la porción.
+- NUNCA analices el texto y la foto como comidas separadas, ni devuelvas dos resultados distintos.
+- NUNCA cuentes dos veces un alimento: si aparece en el texto y también se ve en la foto, es el mismo alimento y va en UNA sola línea del JSON.
+- Si el texto menciona un alimento que no se ve en la foto, respétalo e inclúyelo.
+- Si la foto muestra un alimento que el texto no menciona, inclúyelo también.
+- Si el texto está vacío, estima la comida usando únicamente la foto.
+- Si la foto no muestra comida o no se puede interpretar, analiza sólo lo que indique el texto.`;
+
+/**
+ * Analiza la comida del usuario. `foodText` puede ir vacío si el usuario adjuntó
+ * una foto, y `image` puede ser null si sólo escribió texto. Usa Groq como motor
+ * principal (con un modelo con visión cuando hay foto) y, sólo para texto, cae al
+ * respaldo de DeepSeek. Ninguno de los dos usa búsqueda web.
+ */
+async function analyzeFood(foodText, image = null) {
   try {
-    return await analyzeWithGroq(foodText);
+    return await analyzeWithGroq(foodText, image);
   } catch (groqErr) {
     console.error('Groq no pudo analizar el alimento:', groqErr.message);
 
-    if (DEEPSEEK_API_KEY) {
+    // El respaldo de DeepSeek no acepta imágenes: si había foto no lo usamos, en
+    // vez de descartar la foto en silencio o mandarla a un modelo sin visión.
+    if (!image && DEEPSEEK_API_KEY) {
       try {
         return await analyzeWithDeepSeek(foodText);
       } catch (deepseekErr) {
@@ -459,20 +542,33 @@ async function analyzeFood(foodText) {
   }
 }
 
-async function analyzeWithGroq(foodText) {
+async function analyzeWithGroq(foodText, image = null) {
+  // Con foto cambiamos al modelo con visión y enviamos texto e imagen en UN
+  // único mensaje de usuario para que el modelo los interprete juntos.
+  const activeModel = image ? visionModel : model;
+  const systemPrompt = image
+    ? FOOD_ANALYSIS_SYSTEM_PROMPT + FOOD_PHOTO_ANALYSIS_ADDENDUM
+    : FOOD_ANALYSIS_SYSTEM_PROMPT;
+  const userContent = image
+    ? [
+        { type: 'text', text: foodText || PHOTO_ONLY_INSTRUCTION },
+        { type: 'image_url', image_url: { url: image.dataUrl } },
+      ]
+    : foodText;
+
   try {
     const completion = await groq.chat.completions.create({
-      model,
+      model: activeModel,
       messages: [
-        { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT },
-        { role: 'user', content: foodText },
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
       ],
       // Sin búsqueda web: el análisis es puramente estimativo, así que forzamos
       // la salida JSON y pedimos el mínimo razonamiento posible. Los modelos
       // gpt-oss gastan tokens "pensando" antes de responder; 'low' recorta ese
       // gasto sin afectar la estimación nutricional.
       response_format: { type: 'json_object' },
-      ...(/gpt-oss/i.test(model) ? { reasoning_effort: 'low' } : {}),
+      ...(/gpt-oss/i.test(activeModel) ? { reasoning_effort: 'low' } : {}),
     });
     return parseAnalysis(completion.choices[0]?.message?.content || '');
   } catch (err) {
@@ -582,14 +678,24 @@ app.get('/api/daily-summary', async (req, res) => {
   }
 });
 
-// Registrar una comida
+// Registrar una comida (texto, foto o ambos)
 app.post('/api/logs', async (req, res) => {
   try {
     const userId = await getUserFromReq(req);
     const foodText = String(req.body.foodText || '').trim();
 
-    if (!foodText) {
-      return res.status(400).json({ error: 'Escribe al menos un alimento.' });
+    // La foto es opcional. Se valida antes de tocar la IA para poder responder
+    // con un 400 claro si el archivo no sirve.
+    let image = null;
+    try {
+      image = parseImagePayload(req.body.image);
+    } catch (imageError) {
+      return res.status(400).json({ error: imageError.message });
+    }
+
+    // Se admite texto solo, foto sola, o ambos; nunca ninguno de los dos.
+    if (!foodText && !image) {
+      return res.status(400).json({ error: 'Escribe al menos un alimento o adjuntá una foto.' });
     }
 
     if (foodText.length > 2_000) {
@@ -599,12 +705,14 @@ app.post('/api/logs', async (req, res) => {
     // Permitir opcionalmente loggedAt (ej. pruebas automatizadas o ajuste de fecha)
     const loggedAt = req.body.loggedAt ? new Date(req.body.loggedAt).toISOString() : new Date().toISOString();
 
-    const analysis = req.body.parsed_data || (await analyzeFood(foodText));
+    // Una sola estimación: el texto y la foto se envían juntos al modelo y
+    // producen un único desglose nutricional.
+    const analysis = req.body.parsed_data || (await analyzeFood(foodText, image));
     const { data, error } = await supabase
       .from('daily_logs')
       .insert({
         user_id: userId,
-        food_text: foodText,
+        food_text: foodText || PHOTO_ONLY_LABEL,
         parsed_data: analysis,
         logged_at: loggedAt,
       })
@@ -1164,6 +1272,25 @@ function scheduleMidnightClosingUY() {
 
   return timer;
 }
+
+// ---------------------------------------------------------------------------
+// Errores de parseo del cuerpo de la petición
+//
+// Por ejemplo, una foto más pesada que el límite permitido. Respondemos JSON
+// (en lugar del HTML por defecto de Express) para que el cliente pueda mostrar
+// un mensaje claro.
+// ---------------------------------------------------------------------------
+app.use((error, _req, res, next) => {
+  if (error && error.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'El archivo es demasiado grande para enviarlo.' });
+  }
+
+  if (error && error.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'La solicitud enviada no es válida.' });
+  }
+
+  return next(error);
+});
 
 // ---------------------------------------------------------------------------
 // Arranque

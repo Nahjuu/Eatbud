@@ -46,17 +46,20 @@ The sign-in screen includes a **Resend confirmation email** action. For existing
 | `SUPABASE_SERVICE_ROLE_KEY` | Private key used only by the API.                                                                |
 | `GROQ_API_KEY`              | Groq API key.                                                                                    |
 | `GROQ_MODEL`                | Optional; defaults to `openai/gpt-oss-120b`.                                                    |
+| `GROQ_VISION_MODEL`         | Optional; defaults to `qwen/qwen3.8-27b`. Used only when a meal is sent with a photo.            |
 | `DEEPSEEK_API_KEY`          | Optional fallback; DeepSeek API key, used only when Groq fails.                                  |
 | `DEEPSEEK_MODEL`            | Optional; defaults to `deepseek-chat`.                                                          |
 | `VITE_API_URL`              | Optional, in `frontend/.env`; public API URL when deploying the frontend and backend separately. |
 
-The backend analyzes each food with Groq (`openai/gpt-oss-120b` by default) and returns JSON with foods, calories, protein, carbohydrates and fat; the API sums these values to generate the daily report. The model works **without web search**: it estimates each food from reference nutritional values (USDA per 100 g) and standard portion weights, which keeps every request at roughly 1.3k tokens. If Groq fails (token limit, outage or validation error), it automatically retries with DeepSeek (`deepseek-chat`).
+The backend analyzes each food with Groq (`openai/gpt-oss-120b` by default) and returns JSON with foods, calories, protein, carbohydrates and fat; the API sums these values to generate the daily report. The model works **without web search**: it estimates each food from reference nutritional values (USDA per 100 g) and standard portion weights, which keeps every request at roughly 1.3k tokens. If Groq fails (token limit, outage or validation error), it automatically retries with DeepSeek (`deepseek-chat`) — text only, since DeepSeek does not accept images.
+
+A meal can also be sent with a photo (`image`, a base64 data URL). The photo is optional and never stored: it is processed in memory and discarded. When a photo is present the request switches to a vision-capable model (`GROQ_VISION_MODEL`) and the text **and** the image are sent together in a single message, so the model interprets them as one meal and returns one nutritional breakdown. If the image request fails, no text-only fallback is used: the photo is never silently dropped or sent to a model without vision.
 
 ## API
 
 * `GET /api/health`: checks the connection to the `daily_logs` table.
 * `GET /api/daily-summary`: returns the current day's meals and macros.
-* `POST /api/logs`: receives `{ "foodText": "..." }`, analyzes it with Groq, saves it, and returns the updated daily summary.
+* `POST /api/logs`: receives `{ "foodText": "..." }`, an optional `{ "image": "data:image/jpeg;base64,..." }`, or both. Text-only, photo-only and combined requests are all accepted (a request with neither is rejected with `400`). The meal is analyzed once, saved once, and the updated daily summary is returned.
 
 ## Deployment (Vercel)
 
