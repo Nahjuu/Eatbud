@@ -23,6 +23,12 @@ const model = process.env.GROQ_MODEL && process.env.GROQ_MODEL !== 'groq/compoun
   : 'openai/gpt-oss-120b';
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Respaldo opcional: DeepSeek (API compatible con OpenAI). Se usa sólo cuando
+// Groq falla (límite de tokens, caídas o errores de validación). Si
+// DEEPSEEK_API_KEY queda vacío, el respaldo queda desactivado.
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
 
 // ---------------------------------------------------------------------------
 // Zona horaria de referencia — todas las fechas locales se calculan en UY
@@ -412,20 +418,57 @@ async function reconcilePastDays(userId) {
   }
 }
 
-const FOOD_ANALYSIS_SYSTEM_PROMPT = `Eres un nutricionista experto. Analiza el texto que describe una o varias comidas y devuelve el desglose nutricional de CADA alimento por separado.
+/**
+ * Construye el prompt del analizador nutricional. `webSearch` indica si el
+ * modelo dispone de la búsqueda web integrada (Groq) o no (DeepSeek).
+ */
+function buildFoodAnalysisPrompt({ webSearch }) {
+  const searchRules = webSearch
+    ? `4. Busca en la web SOLO cuando el alimento sea ambiguo o difícil de estimar: comidas preparadas o de restaurante, platos regionales, marcas o productos comerciales, o cantidades inciertas. En ese caso haz UNA sola búsqueda que abarque todo lo dudoso y responde de inmediato, sin repetir ni verificar dos veces.
+5. Si el alimento es común y conocido (pollo, arroz, huevo, manzana, etc.) y la cantidad está clara, NO busques: responde directamente con tu conocimiento nutricional.`
+    : `4. No tienes búsqueda web disponible: estima los valores con tu conocimiento nutricional de referencia (USDA y tablas estándar).
+5. Sé realista y prudente con las estimaciones, sobre todo en comidas preparadas o de restaurante.`;
+
+  return `Eres un nutricionista experto. Analiza el texto que describe una o varias comidas y devuelve el desglose nutricional de CADA alimento por separado.
 
 Reglas:
 1. Respeta EXACTAMENTE la cantidad indicada (gramos, ml, tazas, cucharadas, unidades o porciones). Si no se indica cantidad, asume una porción estándar.
 2. Convierte medidas caseras (taza, cucharada, cucharadita, plato, porción, unidad mediana, etc.) a su equivalente en gramos usando referencias nutricionales estándar.
 3. Los valores de calories, protein, carbs y fat deben ser para la CANTIDAD TOTAL indicada, NO por cada 100 g.
-4. Busca en la web SOLO cuando el alimento sea ambiguo o difícil de estimar: comidas preparadas o de restaurante, platos regionales, marcas o productos comerciales, o cantidades inciertas. En ese caso haz UNA sola búsqueda que abarque todo lo dudoso y responde de inmediato, sin repetir ni verificar dos veces.
-5. Si el alimento es común y conocido (pollo, arroz, huevo, manzana, etc.) y la cantidad está clara, NO busques: responde directamente con tu conocimiento nutricional.
+${searchRules}
 6. "protein", "carbs" y "fat" van en GRAMOS (nunca en porcentaje).
 7. Coherencia macro-calórica: 1 g de proteína ≈ 4 kcal, 1 g de carbohidrato ≈ 4 kcal, 1 g de grasa ≈ 9 kcal. La suma aproximada debe coincidir con las calorías.
 8. La respuesta final debe ser SIEMPRE el JSON como texto plano de la respuesta, NUNCA como llamada a una herramienta o función (no inventes herramientas). Responde directo y conciso: sin explicaciones, sin narraciones, sin markdown y sin citas. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta:
 {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}`;
+}
 
+const FOOD_ANALYSIS_SYSTEM_PROMPT = buildFoodAnalysisPrompt({ webSearch: true });
+const FOOD_ANALYSIS_SYSTEM_PROMPT_NO_SEARCH = buildFoodAnalysisPrompt({ webSearch: false });
+
+/**
+ * Analiza el texto de la comida. Usa Groq (con búsqueda web integrada) y, si
+ * Groq falla, cae al respaldo de DeepSeek. Sólo si ambos fallan se informa el
+ * error genérico al usuario.
+ */
 async function analyzeFood(foodText) {
+  try {
+    return await analyzeWithGroq(foodText);
+  } catch (groqErr) {
+    console.error('Groq no pudo analizar el alimento:', groqErr.message);
+
+    if (DEEPSEEK_API_KEY) {
+      try {
+        return await analyzeWithDeepSeek(foodText);
+      } catch (deepseekErr) {
+        console.error('DeepSeek tampoco pudo analizar el alimento:', deepseekErr.message);
+      }
+    }
+
+    throw new Error('Eatbud no puede calcular en estos momentos, vuelve a intentarlo o intentalo más tarde.');
+  }
+}
+
+async function analyzeWithGroq(foodText) {
   try {
     const completion = await groq.chat.completions.create({
       model,
@@ -447,8 +490,38 @@ async function analyzeFood(foodText) {
     // JSON generado dentro del error: lo rescatamos para no perder el análisis.
     const salvaged = salvageToolUseFailure(err);
     if (salvaged) return parseAnalysis(salvaged);
-    throw new Error('Eatbud no puede calcular en estos momentos, vuelve a intentarlo o intentalo más tarde.');
+    throw err;
   }
+}
+
+// Respaldo con DeepSeek (API compatible con OpenAI, sin búsqueda web integrada).
+async function analyzeWithDeepSeek(foodText) {
+  const response = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: DEEPSEEK_MODEL,
+      messages: [
+        { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT_NO_SEARCH },
+        { role: 'user', content: foodText },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`DeepSeek ${response.status}: ${detail.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  return parseAnalysis(data?.choices?.[0]?.message?.content || '');
 }
 
 // Recupera el JSON que el modelo generó cuando Groq lo rechaza por haberlo

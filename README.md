@@ -46,9 +46,11 @@ The sign-in screen includes a **Resend confirmation email** action. For existing
 | `SUPABASE_SERVICE_ROLE_KEY` | Private key used only by the API.                                                                |
 | `GROQ_API_KEY`              | Groq API key.                                                                                    |
 | `GROQ_MODEL`                | Optional; defaults to `openai/gpt-oss-120b`.                                                    |
+| `DEEPSEEK_API_KEY`          | Optional fallback; DeepSeek API key, used only when Groq fails.                                  |
+| `DEEPSEEK_MODEL`            | Optional; defaults to `deepseek-chat`.                                                          |
 | `VITE_API_URL`              | Optional, in `frontend/.env`; public API URL when deploying the frontend and backend separately. |
 
-The backend analyzes each food with a Groq model that has built-in browser search (`openai/gpt-oss-120b` by default). For every meal, it searches the web to confirm real nutritional values, then returns JSON with foods, calories, protein, carbohydrates and fat; the API sums these values to generate the daily report.
+The backend analyzes each food with a Groq model that has built-in browser search (`openai/gpt-oss-120b` by default). It searches the web only for ambiguous foods (prepared/restaurant meals, brands, unclear portions), then returns JSON with foods, calories, protein, carbohydrates and fat; the API sums these values to generate the daily report. If Groq fails (token limit, outage or validation error), it automatically retries with DeepSeek (`deepseek-chat`), which answers from its nutritional knowledge without web search.
 
 ## API
 
