@@ -15,9 +15,12 @@ if (missingVariables.length) {
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
+// openai/gpt-oss-120b admite búsqueda en la web integrada (necesaria para
+// confirmar las calorías reales de cada alimento). Se puede sobrescribir con
+// GROQ_MODEL. Se conserva la exclusión de 'groq/compound-mini' por retrocompatibilidad.
 const model = process.env.GROQ_MODEL && process.env.GROQ_MODEL !== 'groq/compound-mini'
   ? process.env.GROQ_MODEL
-  : 'llama3-8b-8192';
+  : 'openai/gpt-oss-120b';
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -195,14 +198,21 @@ function databaseMessage(error) {
 }
 
 function parseAnalysis(content) {
-  const start = content.indexOf('{');
-  const end = content.lastIndexOf('}');
+  // El browser search de Groq devuelve citas tipo 【2†L6-L10】 y, a veces,
+  // rodea el JSON con vallas de markdown. Las quitamos antes de parsear.
+  const cleaned = String(content || '')
+    .replace(/```(?:json)?/gi, '')
+    .replace(/【[^】]*】/g, '')
+    .replace(/\[\d+†[^\]]*\]/g, '');
+
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
 
   if (start === -1 || end === -1) {
     throw new Error('Eatbud no puede calcular en estos momentos, vuelve a intentarlo o intentalo más tarde.');
   }
 
-  const response = JSON.parse(content.slice(start, end + 1));
+  const response = JSON.parse(cleaned.slice(start, end + 1));
   const foods = Array.isArray(response.foods) ? response.foods : [];
 
   if (!foods.length) {
@@ -402,17 +412,30 @@ async function reconcilePastDays(userId) {
   }
 }
 
+const FOOD_ANALYSIS_SYSTEM_PROMPT = `Eres un nutricionista experto. Analiza el texto que describe una o varias comidas y devuelve el desglose nutricional de CADA alimento por separado.
+
+Reglas:
+1. Respeta EXACTAMENTE la cantidad indicada (gramos, ml, tazas, cucharadas, unidades o porciones). Si no se indica cantidad, asume una porción estándar.
+2. Convierte medidas caseras (taza, cucharada, cucharadita, plato, porción, unidad mediana, etc.) a su equivalente en gramos usando referencias nutricionales estándar.
+3. Los valores de calories, protein, carbs y fat deben ser para la CANTIDAD TOTAL indicada, NO por cada 100 g.
+4. Busca en la web para confirmar los valores nutricionales reales de cada alimento (USDA u otras bases de datos confiables), especialmente en comidas preparadas o ambiguas.
+5. "protein", "carbs" y "fat" van en GRAMOS (nunca en porcentaje).
+6. Coherencia macro-calórica: 1 g de proteína ≈ 4 kcal, 1 g de carbohidrato ≈ 4 kcal, 1 g de grasa ≈ 9 kcal. La suma aproximada debe coincidir con las calorías.
+7. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta, sin markdown, sin explicaciones y sin citas:
+{"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}`;
+
 async function analyzeFood(foodText) {
   try {
     const completion = await groq.chat.completions.create({
       model,
       messages: [
-        {
-          role: 'system',
-          content: 'Devuelve solo JSON válido: {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}.',
-        },
+        { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT },
         { role: 'user', content: foodText },
       ],
+      // Búsqueda en la web integrada (solo disponible en los modelos GPT-OSS).
+      // Se fuerza para confirmar los valores nutricionales reales de cada alimento.
+      tools: [{ type: 'browser_search' }],
+      tool_choice: 'required',
     });
     return parseAnalysis(completion.choices[0]?.message?.content || '');
   } catch (err) {

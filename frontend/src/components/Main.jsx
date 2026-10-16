@@ -303,9 +303,12 @@ export default function Main({ lang, t, session, profile, setProfile }) {
 
                 <ul className="mt-[18px] grid list-none gap-[10px] border-t border-dark-border pb-0 pl-0 pr-0 pt-[14px]">
                   {entry.foods.map((food, index) => (
-                    <li className="flex items-start justify-between gap-4 text-[.88rem] text-[#d5e0dc] max-[560px]:flex-col max-[560px]:gap-[6px]" key={`${entry.id}-${index}`}>
-                      <span>{food.name} · {format(food.quantity)} {food.unit}</span>
-                      <span className="whitespace-nowrap text-[#93afa6]">{format(food.protein)} P · {format(food.carbs)} C · {format(food.fat)} {lang === 'es' ? 'G' : 'F'}</span>
+                    <li className="flex flex-col gap-[2px] text-[.88rem] text-[#d5e0dc]" key={`${entry.id}-${index}`}>
+                      <div className="flex items-start justify-between gap-4 max-[560px]:flex-col max-[560px]:gap-[2px]">
+                        <span>{food.name} · {format(food.quantity)} {food.unit}</span>
+                        <strong className="whitespace-nowrap text-[#86efc2]">{format(food.calories)} kcal</strong>
+                      </div>
+                      <span className="text-[#93afa6]">{format(food.protein)} P · {format(food.carbs)} C · {format(food.fat)} {lang === 'es' ? 'G' : 'F'}</span>
                     </li>
                   ))}
                 </ul>

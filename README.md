@@ -45,10 +45,10 @@ The sign-in screen includes a **Resend confirmation email** action. For existing
 | `SUPABASE_URL`              | Supabase project URL.                                                                            |
 | `SUPABASE_SERVICE_ROLE_KEY` | Private key used only by the API.                                                                |
 | `GROQ_API_KEY`              | Groq API key.                                                                                    |
-| `GROQ_MODEL`                | Optional; defaults to `groq/compound-mini`.                                                      |
+| `GROQ_MODEL`                | Optional; defaults to `openai/gpt-oss-120b`.                                                    |
 | `VITE_API_URL`              | Optional, in `frontend/.env`; public API URL when deploying the frontend and backend separately. |
 
-`groq/compound-mini` allows Groq to decide whether it needs to search the web to resolve ambiguous products or preparations. The model returns JSON containing foods, calories, protein, carbohydrates, and fat; the API sums these values to generate the daily report.
+The backend analyzes each food with a Groq model that has built-in browser search (`openai/gpt-oss-120b` by default). For every meal, it searches the web to confirm real nutritional values, then returns JSON with foods, calories, protein, carbohydrates and fat; the API sums these values to generate the daily report.
 
 ## API
 
