@@ -422,7 +422,7 @@ Reglas:
 5. Si el alimento es común y conocido (pollo, arroz, huevo, manzana, etc.) y la cantidad está clara, NO busques: responde directamente con tu conocimiento nutricional.
 6. "protein", "carbs" y "fat" van en GRAMOS (nunca en porcentaje).
 7. Coherencia macro-calórica: 1 g de proteína ≈ 4 kcal, 1 g de carbohidrato ≈ 4 kcal, 1 g de grasa ≈ 9 kcal. La suma aproximada debe coincidir con las calorías.
-8. Responde directo y conciso: sin explicaciones, sin narraciones, sin markdown y sin citas. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta:
+8. La respuesta final debe ser SIEMPRE el JSON como texto plano de la respuesta, NUNCA como llamada a una herramienta o función (no inventes herramientas). Responde directo y conciso: sin explicaciones, sin narraciones, sin markdown y sin citas. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta:
 {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}`;
 
 async function analyzeFood(foodText) {
@@ -442,8 +442,30 @@ async function analyzeFood(foodText) {
     });
     return parseAnalysis(completion.choices[0]?.message?.content || '');
   } catch (err) {
+    // Los modelos gpt-oss a veces devuelven el JSON como si fuese una llamada a
+    // herramienta ("tool_use_failed"). Groq rechaza la respuesta, pero incluye el
+    // JSON generado dentro del error: lo rescatamos para no perder el análisis.
+    const salvaged = salvageToolUseFailure(err);
+    if (salvaged) return parseAnalysis(salvaged);
     throw new Error('Eatbud no puede calcular en estos momentos, vuelve a intentarlo o intentalo más tarde.');
   }
+}
+
+// Recupera el JSON que el modelo generó cuando Groq lo rechaza por haberlo
+// enviado como una llamada a una herramienta inexistente.
+function salvageToolUseFailure(err) {
+  const body = err?.error ?? err?.response?.data ?? err;
+  const failed = body?.failed_generation;
+  if (!failed || typeof failed !== 'string') return null;
+  try {
+    const parsed = JSON.parse(failed);
+    const args = parsed && parsed.arguments !== undefined ? parsed.arguments : parsed;
+    const obj = typeof args === 'string' ? JSON.parse(args) : args;
+    if (obj && Array.isArray(obj.foods) && obj.foods.length > 0) return JSON.stringify(obj);
+  } catch {
+    /* la generación fallida no es un JSON rescatable */
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
