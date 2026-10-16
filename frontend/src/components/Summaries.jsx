@@ -6,6 +6,118 @@ function format(value) {
   return Math.round(value || 0);
 }
 
+// ─── Comparación con la meta calórica ────────────────────────────────────────
+// Las calorías consumidas se comparan con la meta diaria del perfil: verde
+// mientras no se pasa, amarillo si se pasa por menos de 300 kcal y rojo si se
+// pasa por más. Dentro de cada tramo el tono se intensifica de forma
+// progresiva, así el color avisa antes de llegar al límite.
+const OVER_LIMIT_KCAL = 300; // kcal de más (por día) que marcan el paso a rojo
+
+function getGoalStatus(consumed, goal, overLimitKcal = OVER_LIMIT_KCAL) {
+  const eaten = format(consumed);
+  const target = format(goal);
+  if (!target || target <= 0 || overLimitKcal <= 0) return null;
+
+  const diff = eaten - target; // negativo: déficit; positivo: exceso
+  const progress = (eaten / target) * 100;
+  const ratio = diff / overLimitKcal; // cuánto se pasa, relativo al límite
+
+  let level;
+  let textClass;
+  let barClass;
+  let pillClass;
+
+  if (diff <= 0) {
+    // Dentro del límite: cuanto más cerca de la meta, más intenso el verde.
+    level = 'ok';
+    const nearGoal = progress >= 90;
+    textClass = nearGoal ? 'text-emerald-300' : 'text-[#86efc2]';
+    barClass = nearGoal ? 'bg-emerald-300' : 'bg-[#86efc2]';
+    pillClass = nearGoal ? 'bg-emerald-300/15 text-emerald-300' : 'bg-[#86efc2]/15 text-[#86efc2]';
+  } else if (diff <= overLimitKcal) {
+    // Amarillo progresivo: sube de tono a medida que se acerca al límite.
+    level = 'over';
+    if (ratio <= 1 / 3) {
+      textClass = 'text-yellow-300';
+      barClass = 'bg-yellow-300';
+      pillClass = 'bg-yellow-300/15 text-yellow-300';
+    } else if (ratio <= 2 / 3) {
+      textClass = 'text-amber-400';
+      barClass = 'bg-amber-400';
+      pillClass = 'bg-amber-400/15 text-amber-400';
+    } else {
+      textClass = 'text-orange-400';
+      barClass = 'bg-orange-400';
+      pillClass = 'bg-orange-400/15 text-orange-400';
+    }
+  } else {
+    // Rojo progresivo: cuanto más se pasa del límite, más oscuro.
+    level = 'danger';
+    if (ratio <= 1.5) {
+      textClass = 'text-red-400';
+      barClass = 'bg-red-400';
+      pillClass = 'bg-red-400/15 text-red-400';
+    } else if (ratio <= 2.2) {
+      textClass = 'text-red-500';
+      barClass = 'bg-red-500';
+      pillClass = 'bg-red-500/15 text-red-500';
+    } else {
+      textClass = 'text-red-600';
+      barClass = 'bg-red-600';
+      pillClass = 'bg-red-600/15 text-red-600';
+    }
+  }
+
+  return {
+    eaten,
+    target,
+    diff,
+    level,
+    textClass,
+    barClass,
+    pillClass,
+    barWidth: Math.min(progress, 100),
+  };
+}
+
+/** Barra de progreso del comparativo, con el color del estado */
+function GoalProgressBar({ status }) {
+  if (!status) return null;
+
+  return (
+    <div className="mt-4 h-2 w-full overflow-hidden rounded-full border border-dark-border/50 bg-dark-bg">
+      <div
+        className={`h-full rounded-full transition-all duration-700 ease-out ${status.barClass}`}
+        style={{ width: `${status.barWidth}%` }}
+      />
+    </div>
+  );
+}
+
+/** Distintivo con la diferencia contra la meta (déficit o exceso) */
+function GoalDiffPill({ status, t, label }) {
+  if (!status) return null;
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[.72rem] font-bold ${status.pillClass}`}>
+      {label ?? (status.diff <= 0 ? t.goalDeficit : t.goalExcess)} {format(Math.abs(status.diff))} kcal
+    </span>
+  );
+}
+
+/** Comparativo "consumido / meta" en una sola línea, con la meta atenuada */
+function GoalComparison({ status, className = '', smallClassName = 'text-sm', children }) {
+  if (!status) return null;
+
+  return (
+    <strong className={`block font-bold ${className} ${status.textClass}`}>
+      {status.eaten}
+      <span className={`font-semibold text-[#a8bdb6] ${smallClassName}`}> / {status.target}</span>
+      {children}
+    </strong>
+  );
+}
+
 /** Dado un YYYY-MM-DD, devuelve el lunes de esa semana */
 function getMonday(dateStr) {
   const d = new Date(`${dateStr}T12:00:00Z`);
@@ -48,10 +160,14 @@ function formatWeekRange(mondayStr, sundayStr, lang) {
 
 // ─── Sub-view: Daily History (list of days) ──────────────────────────────────
 
-function DaysList({ lang, t, session, onSelectDay }) {
+function DaysList({ lang, t, session, profile, onSelectDay }) {
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Meta diaria del perfil: si todavía no está calculada, cada día se muestra
+  // sólo con sus calorías, como antes.
+  const goal = profile?.daily_calorie_goal;
 
   useEffect(() => {
     setLoading(true);
@@ -91,47 +207,56 @@ function DaysList({ lang, t, session, onSelectDay }) {
 
   return (
     <div className="grid gap-3">
-      {days.map((day) => (
-        <button
-          key={day.date}
-          type="button"
-          onClick={() => onSelectDay(day.date)}
-          className="group w-full cursor-pointer rounded-[18px] border border-dark-border bg-dark-surface p-[18px] text-left shadow-[0_18px_50px_rgba(0,0,0,.18)] transition-all duration-200 hover:border-brand/40 hover:shadow-brand/5 active:scale-[0.99]"
-        >
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <h3 className="mb-1 text-base font-bold capitalize leading-[1.45] text-slate-100">
-                {formatDate(day.date, lang)}
-              </h3>
-              <div className="flex items-center gap-3 text-[.83rem] text-[#a8bdb6]">
-                <span className="flex items-center gap-1">
-                  <Utensils size={13} />
-                  {day.mealCount} {day.mealCount === 1 ? t.meal : t.meals}
-                </span>
+      {days.map((day) => {
+        const status = getGoalStatus(day.totals.calories, goal);
+
+        return (
+          <button
+            key={day.date}
+            type="button"
+            onClick={() => onSelectDay(day.date)}
+            className="group w-full cursor-pointer rounded-[18px] border border-dark-border bg-dark-surface p-[18px] text-left shadow-[0_18px_50px_rgba(0,0,0,.18)] transition-all duration-200 hover:border-brand/40 hover:shadow-brand/5 active:scale-[0.99]"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <h3 className="mb-1 text-base font-bold capitalize leading-[1.45] text-slate-100">
+                  {formatDate(day.date, lang)}
+                </h3>
+                <div className="flex flex-wrap items-center gap-3 text-[.83rem] text-[#a8bdb6]">
+                  <span className="flex items-center gap-1">
+                    <Utensils size={13} />
+                    {day.mealCount} {day.mealCount === 1 ? t.meal : t.meals}
+                  </span>
+                  <GoalDiffPill status={status} t={t} />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  {status ? (
+                    <GoalComparison status={status} className="text-lg" smallClassName="text-sm" />
+                  ) : (
+                    <strong className="block text-lg font-bold text-[#86efc2]">{format(day.totals.calories)}</strong>
+                  )}
+                  <span className="text-xs text-[#a8bdb6]">kcal</span>
+                </div>
+                <ChevronRight size={18} className="text-[#a8bdb6] transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <strong className="block text-lg font-bold text-[#86efc2]">{format(day.totals.calories)}</strong>
-                <span className="text-xs text-[#a8bdb6]">kcal</span>
-              </div>
-              <ChevronRight size={18} className="text-[#a8bdb6] transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
+            <div className="mt-3 flex gap-4 border-t border-dark-border/60 pt-3 text-[.82rem] text-[#93afa6]">
+              <span>{format(day.totals.protein)}g {t.protein}</span>
+              <span>{format(day.totals.carbs)}g {t.carbs}</span>
+              <span>{format(day.totals.fat)}g {t.fat}</span>
             </div>
-          </div>
-          <div className="mt-3 flex gap-4 border-t border-dark-border/60 pt-3 text-[.82rem] text-[#93afa6]">
-            <span>{format(day.totals.protein)}g {t.protein}</span>
-            <span>{format(day.totals.carbs)}g {t.carbs}</span>
-            <span>{format(day.totals.fat)}g {t.fat}</span>
-          </div>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 // ─── Sub-view: Day Detail ────────────────────────────────────────────────────
 
-function DayDetail({ date, lang, t, session, onBack }) {
+function DayDetail({ date, lang, t, session, profile, onBack }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -139,6 +264,9 @@ function DayDetail({ date, lang, t, session, onBack }) {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  // Comparativo del día contra la meta diaria del perfil.
+  const status = getGoalStatus(summary?.totals?.calories, profile?.daily_calorie_goal);
 
   const loadDay = useCallback(() => {
     setLoading(true);
@@ -244,7 +372,18 @@ function DayDetail({ date, lang, t, session, onBack }) {
           <div className="mt-3 flex flex-wrap gap-5">
             <div>
               <span className="block text-[.78rem] text-[#a8bdb6]">{t.calToday}</span>
-              <strong className="text-2xl font-bold text-[#86efc2]">{format(summary.totals.calories)} <small className="text-sm">kcal</small></strong>
+              {status ? (
+                <>
+                  <GoalComparison status={status} className="text-2xl" smallClassName="text-base">
+                    <small className="text-xs font-semibold text-[#a8bdb6]"> kcal</small>
+                  </GoalComparison>
+                  <div className="mt-2">
+                    <GoalDiffPill status={status} t={t} />
+                  </div>
+                </>
+              ) : (
+                <strong className="text-2xl font-bold text-[#86efc2]">{format(summary.totals.calories)} <small className="text-sm">kcal</small></strong>
+              )}
             </div>
             <div>
               <span className="block text-[.78rem] text-[#a8bdb6]">{t.protein}</span>
@@ -259,6 +398,7 @@ function DayDetail({ date, lang, t, session, onBack }) {
               <strong className="text-lg font-bold text-slate-100">{format(summary.totals.fat)}g</strong>
             </div>
           </div>
+          <GoalProgressBar status={status} />
         </div>
       </div>
 
@@ -293,7 +433,7 @@ function DayDetail({ date, lang, t, session, onBack }) {
 
 // ─── Sub-view: Weekly Dashboard ──────────────────────────────────────────────
 
-function WeeklyDashboard({ lang, t, session }) {
+function WeeklyDashboard({ lang, t, session, profile }) {
   const [weekStart, setWeekStart] = useState(() => {
     const today = new Date();
     const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'America/Montevideo' });
@@ -307,6 +447,16 @@ function WeeklyDashboard({ lang, t, session }) {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  // Comparativo semanal: la meta diaria cubre los 7 días de la semana, así que
+  // la meta semanal y el margen de 300 kcal se multiplican por 7 (misma
+  // proporción que en el día).
+  const dailyGoal = profile?.daily_calorie_goal;
+  const weekStatus = getGoalStatus(
+    data?.totals?.calories,
+    dailyGoal ? dailyGoal * 7 : 0,
+    OVER_LIMIT_KCAL * 7
+  );
 
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Montevideo' });
   const currentMonday = getMonday(todayStr);
@@ -478,9 +628,20 @@ function WeeklyDashboard({ lang, t, session }) {
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <span className="block text-[.78rem] text-[#a8bdb6] mb-1">{t.weeklyTotal}</span>
-                  <strong className="text-2xl font-bold text-[#86efc2]">
-                    {format(data.totals.calories)} <small className="text-sm">kcal</small>
-                  </strong>
+                  {weekStatus ? (
+                    <>
+                      <GoalComparison status={weekStatus} className="text-2xl" smallClassName="text-base">
+                        <small className="text-xs font-semibold text-[#a8bdb6]"> kcal</small>
+                      </GoalComparison>
+                      <p className={`mt-2 text-[.85rem] font-semibold ${weekStatus.textClass}`}>
+                        {weekStatus.diff <= 0 ? t.weeklyDeficit : t.weeklyExcess}: {format(Math.abs(weekStatus.diff))} kcal
+                      </p>
+                    </>
+                  ) : (
+                    <strong className="text-2xl font-bold text-[#86efc2]">
+                      {format(data.totals.calories)} <small className="text-sm">kcal</small>
+                    </strong>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm sm:gap-5">
                   <div>
@@ -501,6 +662,7 @@ function WeeklyDashboard({ lang, t, session }) {
                   </div>
                 </div>
               </div>
+              <GoalProgressBar status={weekStatus} />
             </div>
           </div>
 
@@ -525,6 +687,8 @@ function WeeklyDashboard({ lang, t, session }) {
               const hasMeals = day.entries.length > 0;
               const isToday = day.date === todayStr;
               const isFuture = day.date > todayStr;
+              // Comparativo del día contra la meta diaria (sólo si hubo comidas).
+              const dayStatus = hasMeals ? getGoalStatus(day.totals.calories, dailyGoal) : null;
 
               return (
                 <div
@@ -554,12 +718,13 @@ function WeeklyDashboard({ lang, t, session }) {
                           )}
                         </div>
                         {hasMeals ? (
-                          <div className="mt-1 flex gap-3 text-[.8rem] text-[#93afa6]">
+                          <div className="mt-1 flex flex-wrap items-center gap-3 text-[.8rem] text-[#93afa6]">
                             <span>{day.entries.length} {day.entries.length === 1 ? t.meal : t.meals}</span>
                             <span>·</span>
                             <span>{format(day.totals.protein)}g P</span>
                             <span>{format(day.totals.carbs)}g C</span>
                             <span>{format(day.totals.fat)}g {lang === 'es' ? 'G' : 'F'}</span>
+                            <GoalDiffPill status={dayStatus} t={t} />
                           </div>
                         ) : (
                           <p className="mt-1 text-xs text-[#a8bdb6]/70 italic">
@@ -569,9 +734,15 @@ function WeeklyDashboard({ lang, t, session }) {
                       </div>
                       <div className="flex items-center gap-3">
                         {hasMeals && (
-                          <strong className="text-lg font-bold text-[#86efc2]">
-                            {format(day.totals.calories)} <small className="text-xs text-[#a8bdb6]">kcal</small>
-                          </strong>
+                          dayStatus ? (
+                            <GoalComparison status={dayStatus} className="text-lg" smallClassName="text-xs">
+                              <small className="text-xs font-semibold text-[#a8bdb6]"> kcal</small>
+                            </GoalComparison>
+                          ) : (
+                            <strong className="text-lg font-bold text-[#86efc2]">
+                              {format(day.totals.calories)} <small className="text-xs text-[#a8bdb6]">kcal</small>
+                            </strong>
+                          )
                         )}
                         {isExpanded ? (
                           <ChevronUp size={18} className="text-[#a8bdb6]" />
@@ -754,7 +925,7 @@ function BackButton({ onClick, t }) {
 
 // ─── Main Summaries Component ────────────────────────────────────────────────
 
-export default function Summaries({ lang, t, session }) {
+export default function Summaries({ lang, t, session, profile }) {
   const [subView, setSubView] = useState('tabs'); // 'tabs' | 'dayDetail'
   const [selectedDate, setSelectedDate] = useState(null);
   const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'weekly'
@@ -776,6 +947,7 @@ export default function Summaries({ lang, t, session }) {
         lang={lang}
         t={t}
         session={session}
+        profile={profile}
         onBack={handleBack}
       />
     );
@@ -812,9 +984,9 @@ export default function Summaries({ lang, t, session }) {
       </div>
 
       {activeTab === 'daily' ? (
-        <DaysList lang={lang} t={t} session={session} onSelectDay={handleSelectDay} />
+        <DaysList lang={lang} t={t} session={session} profile={profile} onSelectDay={handleSelectDay} />
       ) : (
-        <WeeklyDashboard lang={lang} t={t} session={session} />
+        <WeeklyDashboard lang={lang} t={t} session={session} profile={profile} />
       )}
     </div>
   );

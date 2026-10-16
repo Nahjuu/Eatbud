@@ -136,7 +136,7 @@ function AppContent({ lang, setLanguage, t }) {
                   {t.summariesIntro}
                 </p>
               </header>
-              <Summaries lang={lang} t={t} session={session} />
+              <Summaries lang={lang} t={t} session={session} profile={profile} />
             </>
           )}
         </div>

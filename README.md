@@ -59,6 +59,10 @@ On mobile the photo is taken **at that moment with the device camera**: the file
 
 The frontend also keeps the last known profile in `localStorage` under `eatbud:profile:<user id>`. On load, that cached profile is used to paint the app on the very first render (no waiting screen) while the API is revalidated in the background; the fresh response replaces it silently. The cache lives in `frontend/src/context/AuthContext.jsx`, is keyed by user id (a cached profile can never be shown to another account) and is removed when the server reports that the profile no longer exists.
 
+**Summaries** (`frontend/src/components/Summaries.jsx`) compare the logged calories against the profile's daily calorie goal (`profile.daily_calorie_goal`) instead of showing a bare number. Each day in the daily list and in the weekly view shows `consumed / goal` (e.g. `2000 / 2451`), the day view adds the same comparison, a deficit/excess badge and a progress bar, and the weekly card compares the whole week against `daily goal × 7` and states the week's deficit or excess in kcal.
+
+The colour is a shared, progressive scale (`getGoalStatus`): **green** while the user stays within the goal (a brighter green once 90% is reached), **yellow → amber → orange** when the user goes over by up to 300 kcal, and **red → darker red** beyond 300 kcal. The week uses the same proportion, so its threshold is `300 × 7 = 2100` kcal over the weekly goal. When the goal has not been calculated yet, the comparison is simply omitted and the raw calories are shown as before.
+
 ## API
 
 * `GET /api/health`: checks the connection to the `daily_logs` table.
