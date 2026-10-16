@@ -102,7 +102,10 @@ function AppContent({ lang, setLanguage, t }) {
         profile={profile}
       />
       <main className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[720px] px-4 pb-[104px] pt-[24px] md:px-8 md:py-[72px]">
+        {/* El padding inferior deja hueco para la barra de navegación móvil y,
+            si el dispositivo tiene indicador de inicio (iOS instalado), para su
+            área segura. */}
+        <div className="mx-auto w-full max-w-[720px] px-4 pb-[calc(104px+env(safe-area-inset-bottom))] pt-[24px] md:px-8 md:py-[72px]">
           {currentView === 'home' && (
             <>
               <header className="mb-8">

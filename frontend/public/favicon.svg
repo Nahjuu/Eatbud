@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Eatbud">
+  <!-- Icono maestro vectorial. Los PNG del manifest (icons/*.png) y el de iOS
+       (apple-touch-icon.png) se generan con `node scripts/generate-icons.mjs`
+       a partir de este mismo dibujo y esta misma paleta. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#174a3d" />
+      <stop offset="1" stop-color="#07110f" />
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#6ee7b7" />
+      <stop offset="1" stop-color="#a7f3d0" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="113" fill="url(#bg)" />
+  <path d="M256 82 C 402 176 402 336 256 430 C 110 336 110 176 256 82 Z" fill="url(#leaf)" />
+  <path d="M256 82 C 110 176 110 336 256 430 Z" fill="#07110f" fill-opacity="0.18" />
+</svg>

@@ -12,14 +12,18 @@ export default function Sidebar({ lang, setLanguage, t, session, supabase, curre
 
   return (
     <>
-      <div className="flex w-full flex-shrink-0 items-center justify-between border-b border-dark-border bg-dark-bg px-4 py-3 md:hidden">
+      {/* Cabecera móvil: el padding superior suma el área segura para que el
+          contenido no quede bajo la barra de estado cuando la app está
+          instalada (iOS, status bar translúcida). */}
+      <div className="flex w-full flex-shrink-0 items-center justify-between border-b border-dark-border bg-dark-bg px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:hidden">
         <span className="font-extrabold tracking-[.18em] text-brand">EATBUD</span>
         <button onClick={() => setIsOpen(!isOpen)} className="flex h-10 w-10 items-center justify-center text-slate-300" aria-label="Menú">
           {isOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
       </div>
 
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-dark-bg border-r border-dark-border transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
+      {/* Panel lateral: también respeta las áreas seguras (móvil instalado). */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-dark-bg border-r border-dark-border transform transition-transform duration-300 ease-in-out flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
         <div className="p-6 flex-shrink-0 flex justify-between items-center">
           <span className="text-xl font-extrabold tracking-[.18em] text-brand">EATBUD</span>
           <div className="md:hidden">
@@ -87,7 +91,9 @@ export default function Sidebar({ lang, setLanguage, t, session, supabase, curre
       )}
 
       {/* Barra de navegación inferior para móviles */}
-      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-dark-bg/95 backdrop-blur-md border-t border-dark-border px-4 py-2 flex items-center justify-around shadow-lg">
+      {/* Barra de navegación inferior para móviles: el padding inferior suma el
+          área segura del indicador de inicio de iOS. */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-dark-bg/95 backdrop-blur-md border-t border-dark-border px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex items-center justify-around shadow-lg">
         <button
           type="button"
           onClick={() => setCurrentView('home')}

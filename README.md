@@ -65,6 +65,48 @@ The colour is a shared, progressive scale (`getGoalStatus`): **green** while the
 
 The weekly comparison only counts days with logged meals: with a 2451 kcal goal and three logged days the week is measured against `2451 × 3 = 7353` kcal, and the 300 kcal tolerance scales the same way (`300 × 3`), so a week is never judged against days the user did not log. A week without meals shows no comparison at all, and when the goal has not been calculated yet the raw calories are shown as before. Days in the weekly list start collapsed and open on tap, with an expand/collapse-all shortcut.
 
+## Installable app (PWA)
+
+Eatbud can be installed on iOS and Android straight from the browser. Everything lives in `frontend/public/`, so no build plugin and no extra dependency were added:
+
+* `frontend/public/manifest.webmanifest`: name and short name `Eatbud`, `id` and `start_url` `/`, `scope` `/`, `display: "standalone"`, theme and background `#07110f`, and the icon list.
+* `frontend/public/icons/`: `icon-192.png` and `icon-512.png` (`purpose: "any"`, with rounded corners) plus `maskable-512.png` (`purpose: "maskable"`, full-bleed background with the glyph inside Android's safe zone).
+* `frontend/public/apple-touch-icon.png` (180×180) plus the iOS tags in `frontend/index.html` (`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style: black-translucent`, `apple-mobile-web-app-title` and `viewport-fit=cover`).
+* Safe areas: because the iOS status bar is translucent when installed, the mobile header, the side drawer, the bottom bar (`frontend/src/components/Sidebar.jsx`) and the content padding (`frontend/src/App.jsx`) add `env(safe-area-inset-*)`, so nothing hides behind the notch or the home indicator.
+* `frontend/public/sw.js` and `frontend/src/pwa.js`: a service worker registered **only in production builds** (in development it would cache the Vite dev server).
+
+The icons reuse the app palette (`#07110f`, `#174a3d`, `#6ee7b7`, `#a7f3d0`). The master drawing is the vector `frontend/public/favicon.svg`, and the PNGs are rasterised by a dependency-free script:
+
+```bash
+node frontend/scripts/generate-icons.mjs
+```
+
+### What the service worker caches (and what it never caches)
+
+It exists for installability and offline start-up only, and it is deliberately conservative:
+
+* It ignores anything that is not `GET`, anything cross-origin (Supabase auth and, in production, the backend on `https://eatbudbackend.vercel.app`) and any request carrying an `Authorization` header. **Sessions, profiles, meal logs, summaries and AI analyses are never stored in a cache**, so stale or private data cannot be served from it.
+* It also ignores `/api/*` (the development proxy) and every other route.
+* The app shell (`/index.html`, manifest, icons, favicon) is served **network-first**, so a new deployment is picked up on the next launch and the cached copy is only used when the device is offline.
+* Only `/assets/*` (Vite's hashed, immutable files) and the icons/manifest are served cache-first.
+
+### Testing the production build locally
+
+```bash
+npm run build --prefix frontend
+npm run preview --prefix frontend
+```
+
+`/manifest.webmanifest` must answer `200 application/manifest+json`, `/sw.js` must answer `200`, and the browser DevTools → *Application* → *Manifest* / *Service Workers* panels should show no errors. In Lighthouse, the *Installable* audit should pass.
+
+### Installing it
+
+**iPhone / iPad (Safari):** open `https://eatbud.vercel.app` → **Share** → **Add to Home Screen** → **Add**. It opens full screen, with the Eatbud icon and the dark status bar. Sign in once inside the installed app: iOS gives home-screen apps their own storage, so the Safari session is not shared. Confirmation and password-reset emails open in Safari, not in the installed app, which is expected.
+
+**Android (Chrome, Edge or Samsung Internet):** open `https://eatbud.vercel.app` → use the install banner or the ⋮ menu → **Install app / Add to Home screen**.
+
+HTTPS is required and Vercel already provides it; the manifest, the icons and `sw.js` are static files copied into the build output (`dist/`), so they are served with the rest of the site and no additional deployment configuration is needed. `start_url` is `/` because the app switches views with state (there is no client-side router), so there are no deep links to configure.
+
 ## API
 
 * `GET /api/health`: checks the connection to the `daily_logs` table.
