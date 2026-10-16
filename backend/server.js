@@ -418,10 +418,11 @@ Reglas:
 1. Respeta EXACTAMENTE la cantidad indicada (gramos, ml, tazas, cucharadas, unidades o porciones). Si no se indica cantidad, asume una porción estándar.
 2. Convierte medidas caseras (taza, cucharada, cucharadita, plato, porción, unidad mediana, etc.) a su equivalente en gramos usando referencias nutricionales estándar.
 3. Los valores de calories, protein, carbs y fat deben ser para la CANTIDAD TOTAL indicada, NO por cada 100 g.
-4. Busca en la web para confirmar los valores nutricionales reales de cada alimento (USDA u otras bases de datos confiables), especialmente en comidas preparadas o ambiguas.
-5. "protein", "carbs" y "fat" van en GRAMOS (nunca en porcentaje).
-6. Coherencia macro-calórica: 1 g de proteína ≈ 4 kcal, 1 g de carbohidrato ≈ 4 kcal, 1 g de grasa ≈ 9 kcal. La suma aproximada debe coincidir con las calorías.
-7. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta, sin markdown, sin explicaciones y sin citas:
+4. Usa la búsqueda web UNA SOLA VEZ: haz una única búsqueda que abarque todos los alimentos juntos. No hagas una búsqueda por alimento, no repitas búsquedas ni verifiques dos veces. Si ya conoces el valor de un alimento común, no necesitas buscarlo.
+5. Después de esa única búsqueda, calcula y responde de inmediato en un solo paso, sin iterar ni revisar de nuevo.
+6. "protein", "carbs" y "fat" van en GRAMOS (nunca en porcentaje).
+7. Coherencia macro-calórica: 1 g de proteína ≈ 4 kcal, 1 g de carbohidrato ≈ 4 kcal, 1 g de grasa ≈ 9 kcal. La suma aproximada debe coincidir con las calorías.
+8. Responde directo y conciso: sin explicaciones, sin narraciones, sin markdown y sin citas. Devuelve ÚNICAMENTE JSON válido con esta estructura exacta:
 {"foods":[{"name":"","quantity":0,"unit":"","calories":0,"protein":0,"carbs":0,"fat":0}]}`;
 
 async function analyzeFood(foodText) {
