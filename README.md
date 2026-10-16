@@ -70,16 +70,22 @@ The weekly comparison only counts days with logged meals: with a 2451 kcal goal 
 Eatbud can be installed on iOS and Android straight from the browser. Everything lives in `frontend/public/`, so no build plugin and no extra dependency were added:
 
 * `frontend/public/manifest.webmanifest`: name and short name `Eatbud`, `id` and `start_url` `/`, `scope` `/`, `display: "standalone"`, theme and background `#07110f`, and the icon list.
-* `frontend/public/icons/`: `icon-192.png` and `icon-512.png` (`purpose: "any"`, with rounded corners) plus `maskable-512.png` (`purpose: "maskable"`, full-bleed background with the glyph inside Android's safe zone).
+* `frontend/public/icons/`: `icon-192.png` and `icon-512.png` (`purpose: "any"`, transparent rounded corners) plus `maskable-512.png` (`purpose: "maskable"`, full-bleed background with the glyph inside Android's safe zone). `frontend/public/favicon-32.png` is the tab icon referenced from `index.html`.
 * `frontend/public/apple-touch-icon.png` (180×180) plus the iOS tags in `frontend/index.html` (`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style: black-translucent`, `apple-mobile-web-app-title` and `viewport-fit=cover`).
 * Safe areas: because the iOS status bar is translucent when installed, the mobile header, the side drawer, the bottom bar (`frontend/src/components/Sidebar.jsx`) and the content padding (`frontend/src/App.jsx`) add `env(safe-area-inset-*)`, so nothing hides behind the notch or the home indicator.
 * `frontend/public/sw.js` and `frontend/src/pwa.js`: a service worker registered **only in production builds** (in development it would cache the Vite dev server).
 
-The icons reuse the app palette (`#07110f`, `#174a3d`, `#6ee7b7`, `#a7f3d0`). The master drawing is the vector `frontend/public/favicon.svg`, and the PNGs are rasterised by a dependency-free script:
+The icons are rasterised from the real brand logo by a dependency-free script (no image library, no extra dependency). Drop the logo as `frontend/scripts/icon-source.png` (a square PNG, ideally ≥ 512 px) and run:
 
 ```bash
 node frontend/scripts/generate-icons.mjs
 ```
+
+The script decodes the PNG by hand, removes the white background while keeping the anti-aliased edge (un-blending it with the artwork's own colour, so no light rim shows on dark backgrounds), crops to the drawing, and re-encodes the PNGs with block-average scaling:
+
+* `icon-192.png` / `icon-512.png` / `favicon-32.png` keep the rounded corners transparent.
+* `maskable-512.png` and `apple-touch-icon.png` are full-bleed: the outside of the drawing is filled with the nearest artwork colour (spreading inwards pixel by pixel), so Android's and iOS's rounded masks never reveal a border.
+* It also warns if the glyph grows past Android's maskable safe zone, so the logo is never clipped.
 
 ### What the service worker caches (and what it never caches)
 

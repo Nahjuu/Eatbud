@@ -18,7 +18,7 @@
  * de producción (así nunca se queda una versión vieja pegada) y la copia
  * guardada sólo se usa cuando no hay red.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `eatbud-shell-${VERSION}`;
 const ASSET_CACHE = `eatbud-assets-${VERSION}`;
 
@@ -27,7 +27,7 @@ const SHELL_URLS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/favicon.svg',
+  '/favicon-32.png',
   '/apple-touch-icon.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
