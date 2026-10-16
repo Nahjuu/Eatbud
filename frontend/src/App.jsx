@@ -3,7 +3,6 @@ import Sidebar from './components/Sidebar';
 import Main from './components/Main';
 import Login from './components/Login';
 import Profile from './components/Profile';
-import Summaries from './components/Summaries';
 import { translations } from './translations';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { supabase } from './supabaseClient';
@@ -14,7 +13,7 @@ function AppContent({ lang, setLanguage, t }) {
   const { session, loading: sessionLoading } = useContext(AuthContext);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [currentView, setCurrentView] = useState('home'); // 'home', 'profile', 'summaries'
+  const [currentView, setCurrentView] = useState('home'); // 'home', 'profile'
   const [profileError, setProfileError] = useState('');
 
   const fetchProfile = async () => {
@@ -94,7 +93,7 @@ function AppContent({ lang, setLanguage, t }) {
         profile={profile}
       />
       <main className="flex-1 overflow-y-auto w-full">
-        <div className="mx-auto w-[calc(100%-32px)] max-w-[720px] pt-[32px] pb-[96px] md:py-[72px]">
+        <div className="mx-auto w-[calc(100%-32px)] max-w-[720px] py-[32px] md:py-[72px]">
           {currentView === 'home' && (
             <>
               <header className="mb-8">
@@ -116,20 +115,6 @@ function AppContent({ lang, setLanguage, t }) {
               setProfile={setProfile} 
               t={t} 
             />
-          )}
-          {currentView === 'summaries' && (
-            <>
-              <header className="mb-8">
-                <p className="mb-3 text-xs font-extrabold tracking-[.18em] text-brand">{t.eyebrow}</p>
-                <h1 className="mb-3 max-w-[560px] text-[clamp(1.8rem,5vw,2.8rem)] font-bold leading-[1.1] tracking-[-.04em]">
-                  {t.summariesTitle}
-                </h1>
-                <p className="mb-0 max-w-[560px] text-[1.05rem] leading-[1.6] text-[#b9c9c4]">
-                  {t.summariesIntro}
-                </p>
-              </header>
-              <Summaries lang={lang} t={t} session={session} />
-            </>
           )}
         </div>
       </main>
