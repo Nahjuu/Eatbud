@@ -6,3 +6,8 @@ build/
 .env.*
 !.env.example
 .DS_Store
+
+# Copia local del logo maestro. El que usa el generador de iconos, y por tanto
+# el que manda, es `frontend/scripts/icon-source.png`.
+/eatbud.png
+/eatbud.jpg
