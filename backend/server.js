@@ -510,6 +510,8 @@ async function analyzeWithDeepSeek(foodText) {
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2,
+      // Acotamos la salida para que el respaldo sea lo más económico posible.
+      max_tokens: 1024,
       stream: false,
     }),
     signal: AbortSignal.timeout(45000),
