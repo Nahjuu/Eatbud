@@ -8,6 +8,22 @@ import { translations } from './translations';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { supabase } from './supabaseClient';
 
+// Pantalla de espera mínima. Sólo se ve la primera vez que se abre la app en
+// este dispositivo (cuando todavía no hay ningún perfil guardado): si ya hay
+// perfil cacheado, la app se pinta al instante y esto no aparece.
+function AppBootSkeleton({ t }) {
+  return (
+    <div role="status" aria-live="polite" className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
+      <span className="animate-pulse text-2xl font-extrabold tracking-[.18em] text-brand">EATBUD</span>
+      <div aria-hidden="true" className="w-full max-w-[280px] space-y-3">
+        <div className="mx-auto h-3 w-3/4 animate-pulse rounded-full bg-dark-surface" />
+        <div className="mx-auto h-3 w-1/2 animate-pulse rounded-full bg-dark-surface" />
+      </div>
+      <span className="sr-only">{t.loadingData}</span>
+    </div>
+  );
+}
+
 function AppContent({ lang, setLanguage, t }) {
   // La sesión y el perfil viven en AuthContext, fuera de esta vista: así el
   // perfil no se pierde ni se vuelve a pedir al navegar entre páginas.
@@ -36,10 +52,11 @@ function AppContent({ lang, setLanguage, t }) {
     return <Login lang={lang} setLanguage={setLanguage} t={t} />;
   }
 
-  // Sólo mostramos "Cargando perfil..." cuando realmente no hay datos usables
-  // todavía. Si el perfil ya está cargado, la navegación no muestra este aviso.
-  if (!profile && profileLoading) {
-    return <div className="flex min-h-screen items-center justify-center px-4 text-center text-slate-50">Cargando perfil...</div>;
+  // Pantalla de espera sólo si no hay ningún perfil utilizable todavía (primer
+  // arranque en este dispositivo). Al navegar entre páginas nunca aparece,
+  // porque el perfil vive en AuthContext y no se vuelve a pedir.
+  if (!profile && profileLoading && !profileError) {
+    return <AppBootSkeleton t={t} />;
   }
 
   if (!profile && profileError) {
@@ -47,7 +64,7 @@ function AppContent({ lang, setLanguage, t }) {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center text-slate-50">
         <p className="text-red-400">{profileError}</p>
         <button
-          onClick={() => refreshProfile({ force: true })}
+          onClick={() => refreshProfile()}
           className="rounded-xl bg-brand px-4 py-2 font-bold text-dark-bg hover:bg-brand-light"
         >
           Reintentar

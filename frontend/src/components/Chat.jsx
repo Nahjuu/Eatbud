@@ -1,8 +1,6 @@
 import { useRef, useState } from 'react';
 
-// Tipos aceptados por el proveedor de visión del backend.
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-// Límite del archivo original elegido en el dispositivo.
+// Límite del archivo original capturado en el dispositivo.
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 // Lado máximo al que se reduce la foto antes de enviarla: mantiene el peso bajo
 // y es más que suficiente para que el modelo reconozca la comida.
@@ -70,7 +68,9 @@ export default function Chat({
 
     if (!file || busy) return;
 
-    if (!ACCEPTED_TYPES.includes(file.type)) {
+    // La cámara entrega la foto como image/* y después se re-codifica a JPEG,
+    // dos veces: primero acá (canvas) y el backend valida el resultado.
+    if (!file.type.startsWith('image/')) {
       setImageError(t.errorPhotoType);
       return;
     }
@@ -136,11 +136,13 @@ export default function Chat({
       {imageError && <p className="m-0 text-sm text-red-400" role="alert">{imageError}</p>}
 
       <div className="flex items-center gap-2">
-        {/* Adjuntar foto: sólo en móvil, el escritorio conserva su interfaz. */}
+        {/* Sacar foto: sólo en móvil. `capture="environment"` abre la cámara
+            trasera en el momento, en vez de dar acceso a la galería. */}
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*"
+          capture="environment"
           className="hidden"
           onChange={handleFileChange}
         />

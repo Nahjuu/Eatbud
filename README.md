@@ -55,6 +55,10 @@ The backend analyzes each food with Groq (`openai/gpt-oss-120b` by default) and 
 
 A meal can also be sent with a photo (`image`, a base64 data URL). The photo is optional and never stored: it is processed in memory and discarded. When a photo is present the request switches to a vision-capable model (`GROQ_VISION_MODEL`) and the text **and** the image are sent together in a single message, so the model interprets them as one meal and returns one nutritional breakdown. If the image request fails, no text-only fallback is used: the photo is never silently dropped or sent to a model without vision.
 
+On mobile the photo is taken **at that moment with the device camera**: the file input uses `capture="environment"`, so the browser opens the rear camera instead of giving access to the gallery. The picker is mobile-only (`md:hidden`); on desktop the interface stays text-only. The browser shrinks the photo to 1024 px and re-encodes it as JPEG before sending it, so the request stays small.
+
+The frontend also keeps the last known profile in `localStorage` under `eatbud:profile:<user id>`. On load, that cached profile is used to paint the app on the very first render (no waiting screen) while the API is revalidated in the background; the fresh response replaces it silently. The cache lives in `frontend/src/context/AuthContext.jsx`, is keyed by user id (a cached profile can never be shown to another account) and is removed when the server reports that the profile no longer exists.
+
 ## API
 
 * `GET /api/health`: checks the connection to the `daily_logs` table.
