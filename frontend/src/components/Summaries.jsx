@@ -82,7 +82,7 @@ function DaysList({ lang, t, session, onSelectDay }) {
 
   if (!days.length) {
     return (
-      <div className="rounded-[18px] border border-dark-border bg-dark-surface p-10 text-center shadow-[0_18px_50px_rgba(0,0,0,.18)]">
+      <div className="rounded-[18px] border border-dark-border bg-dark-surface p-6 text-center shadow-[0_18px_50px_rgba(0,0,0,.18)] sm:p-10">
         <Calendar size={40} className="mx-auto mb-4 text-[#a8bdb6] opacity-50" />
         <p className="text-[#a8bdb6]">{t.noHistory}</p>
       </div>
@@ -482,7 +482,7 @@ function WeeklyDashboard({ lang, t, session }) {
                     {format(data.totals.calories)} <small className="text-sm">kcal</small>
                   </strong>
                 </div>
-                <div className="flex gap-5 text-sm">
+                <div className="flex flex-wrap gap-3 text-sm sm:gap-5">
                   <div>
                     <span className="block text-[.73rem] text-[#a8bdb6]">{t.protein}</span>
                     <strong className="text-slate-100">{format(data.totals.protein)}g</strong>
@@ -505,7 +505,7 @@ function WeeklyDashboard({ lang, t, session }) {
           </div>
 
           {/* Selector de expansión rápida */}
-          <div className="mb-3 flex items-center justify-between px-1">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
             <span className="text-xs font-bold uppercase tracking-wider text-[#a8bdb6]">
               {data.totalMeals} {data.totalMeals === 1 ? t.meal : t.meals} {lang === 'es' ? 'en la semana' : 'this week'}
             </span>

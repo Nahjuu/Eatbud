@@ -56,20 +56,20 @@ export default function CalorieCounter({ totals, t, session, profile, setProfile
 
   return (
     <section className="mb-5 grid grid-cols-[1fr_1.3fr] overflow-hidden rounded-[18px] border border-dark-border bg-dark-surface shadow-[0_18px_50px_rgba(0,0,0,.18)] max-[560px]:grid-cols-1" aria-label="Resumen diario">
-      <div className="bg-[#0c3d31] p-[26px] flex flex-col justify-center">
+      <div className="flex flex-col justify-center bg-[#0c3d31] p-5 sm:p-[26px]">
         <span className="block text-[.83rem] text-[#a8bdb6]">{t.calToday}</span>
         
         <div className="mt-[7px]">
           {goal ? (
-            <div className="flex items-baseline gap-2">
-              <strong className="block text-[2.2rem] font-bold tracking-[-.05em] text-slate-50">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <strong className="block text-[1.9rem] font-bold tracking-[-.05em] text-slate-50 sm:text-[2.2rem]">
                 {calories}
               </strong>
               <span className="text-lg text-[#a8bdb6] font-semibold">/ {goal} <small className="text-sm">kcal</small></span>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <strong className="block text-[2.2rem] font-bold tracking-[-.05em] text-[#86efc2]">
+              <strong className="block text-[1.9rem] font-bold tracking-[-.05em] text-[#86efc2] sm:text-[2.2rem]">
                 {calories} <small className="text-base">kcal</small>
               </strong>
               <div className="flex items-center gap-2">
@@ -93,7 +93,7 @@ export default function CalorieCounter({ totals, t, session, profile, setProfile
         )}
       </div>
       
-      <div className="grid grid-cols-3 gap-4 px-[18px] py-[26px] max-[560px]:p-[18px]">
+      <div className="grid grid-cols-3 gap-2 p-4 sm:gap-4 sm:px-[18px] sm:py-[26px]">
         <div>
           <span className="block text-[.83rem] text-[#a8bdb6]">{t.protein}</span>
           <strong className="mt-2 block text-[1.1rem] font-bold">{format(totals.protein)} g</strong>

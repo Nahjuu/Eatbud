@@ -82,14 +82,14 @@ export default function Profile({ session, profile, setProfile, t, isFirstTime =
   if (isEditing) {
     return (
       <div className="w-full max-w-2xl mx-auto overflow-hidden rounded-[18px] border border-dark-border bg-dark-surface shadow-[0_18px_50px_rgba(0,0,0,.18)] animate-fade-in-up">
-        <div className="border-b border-dark-border bg-[#0c3d31]/80 p-8">
+        <div className="border-b border-dark-border bg-[#0c3d31]/80 p-5 sm:p-8">
           <h2 className="text-2xl font-extrabold tracking-tight text-brand-light">
             {isFirstTime ? t.completeProfile : t.editProfile}
           </h2>
           {isFirstTime && <p className="text-sm text-slate-300 mt-2">{t.completeProfileHint}</p>}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-5 sm:p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="flex flex-col gap-2">
               <label htmlFor="name" className="text-sm font-bold text-slate-200">{t.nameLabel}</label>
@@ -158,13 +158,13 @@ export default function Profile({ session, profile, setProfile, t, isFirstTime =
 
   return (
     <div className="w-full max-w-2xl mx-auto overflow-hidden rounded-[18px] border border-dark-border bg-dark-surface shadow-[0_18px_50px_rgba(0,0,0,.18)] animate-fade-in-up">
-      <div className="border-b border-dark-border bg-[#0c3d31]/80 p-8 flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 border-b border-dark-border bg-[#0c3d31]/80 p-5 sm:p-8">
         <h2 className="text-2xl font-extrabold tracking-tight text-brand-light">{t.profile}</h2>
         <button onClick={() => setIsEditing(true)} className="rounded-xl bg-brand/20 border border-brand/40 px-4 py-2 text-sm font-extrabold text-brand hover:bg-brand/30 transition-colors">
           {t.editProfile}
         </button>
       </div>
-      <div className="p-8">
+      <div className="p-5 sm:p-8">
         {success && <div className="mb-6 rounded-xl border border-brand/40 bg-brand/10 p-3"><p className="text-center text-sm text-brand-light">{success}</p></div>}
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-4">

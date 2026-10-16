@@ -53,6 +53,7 @@ export default function Main({ lang, t, session, profile, setProfile }) {
   const [editText, setEditText] = useState('');
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
+  const [image, setImage] = useState('');
 
   const loadSummary = useCallback(async () => {
     setError('');
@@ -102,7 +103,8 @@ export default function Main({ lang, t, session, profile, setProfile }) {
     event.preventDefault();
     const text = foodText.trim();
 
-    if (!text || saving) return;
+    // Se admite texto, foto o ambos: con uno de los dos alcanza.
+    if ((!text && !image) || saving) return;
 
     setSaving(true);
     setError('');
@@ -114,13 +116,14 @@ export default function Main({ lang, t, session, profile, setProfile }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ foodText: text }),
+        body: JSON.stringify({ foodText: text, image: image || undefined }),
       });
       const data = await response.json();
 
       if (!response.ok) throw new Error(data.error);
       setSummary(data.summary);
       setFoodText('');
+      setImage('');
     } catch (requestError) {
       setError(requestError.message || t.errorSave);
     } finally {
@@ -198,7 +201,9 @@ export default function Main({ lang, t, session, profile, setProfile }) {
       
       <Chat 
         foodText={foodText} 
-        setFoodText={setFoodText} 
+        setFoodText={setFoodText}
+        image={image}
+        setImage={setImage} 
         saving={saving} 
         saveFood={saveFood} 
         t={t} 

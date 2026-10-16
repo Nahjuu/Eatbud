@@ -12,10 +12,10 @@ export default function Sidebar({ lang, setLanguage, t, session, supabase, curre
 
   return (
     <>
-      <div className="md:hidden flex items-center justify-between p-4 bg-dark-bg border-b border-dark-border">
+      <div className="flex w-full flex-shrink-0 items-center justify-between border-b border-dark-border bg-dark-bg px-4 py-3 md:hidden">
         <span className="font-extrabold tracking-[.18em] text-brand">EATBUD</span>
-        <button onClick={() => setIsOpen(!isOpen)} className="text-slate-300">
-          {isOpen ? <X size={24} /> : <Menu size={24} />}
+        <button onClick={() => setIsOpen(!isOpen)} className="flex h-10 w-10 items-center justify-center text-slate-300" aria-label="Menú">
+          {isOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
       </div>
 

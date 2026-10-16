@@ -79,18 +79,18 @@ export default function Login({ lang, setLanguage, t }) {
   };
 
   return (
-    <main className="relative flex min-h-[80vh] items-center justify-center p-4">
-      <div className="absolute left-4 top-4">
+    <main className="relative flex min-h-[80vh] flex-col items-center justify-center gap-4 p-4 py-10">
+      <div className="w-full max-w-md sm:absolute sm:left-4 sm:top-4 sm:w-auto">
         <LanguageSelector lang={lang} setLanguage={setLanguage} />
       </div>
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-dark-border bg-dark-surface shadow-2xl backdrop-blur-md animate-fade-in-up">
-        <div className="border-b border-dark-border bg-[#0c3d31]/80 p-8 text-center">
+        <div className="border-b border-dark-border bg-[#0c3d31]/80 p-6 text-center sm:p-8">
           <p className="mb-3 text-lg font-extrabold tracking-[.18em] text-brand">EATBUD</p>
           <h2 className="mb-2 text-3xl font-extrabold tracking-tight text-brand-light">{isRegistration ? t.registerTitle : t.loginTitle}</h2>
           <p className="text-sm text-slate-300">{isRegistration ? t.registerHint : t.loginPasswordHint}</p>
         </div>
 
-        <div className="p-8">
+        <div className="p-6 sm:p-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <label htmlFor="email" className="text-sm font-bold text-slate-200">{t.emailLabel}</label>
