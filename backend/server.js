@@ -265,6 +265,34 @@ function parseAnalysis(content) {
   return { foods: normalizedFoods, totals };
 }
 
+function parseQuestions(content) {
+  const cleaned = String(content || '').replace(/```(?:json)?/gi, '');
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('No se pudieron generar las preguntas.');
+
+  const response = JSON.parse(cleaned.slice(start, end + 1));
+  const seen = new Set();
+  const questions = (Array.isArray(response.questions) ? response.questions : [])
+    .slice(0, 5)
+    .map((item, index) => ({
+      id: String(item?.id || `q${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || `q${index + 1}`,
+      question: String(item?.question || '').trim().slice(0, 300),
+    }))
+    .filter((item) => item.question && !seen.has(item.id) && seen.add(item.id));
+  return { questions };
+}
+
+function formatClarifications(value) {
+  if (!Array.isArray(value)) return '';
+  return value
+    .slice(0, 5)
+    .map((item) => ({ question: String(item?.question || '').trim(), answer: String(item?.answer || '').trim() }))
+    .filter((item) => item.question && item.answer)
+    .map((item) => `- ${item.question}: ${item.answer}`)
+    .join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Validación de la foto adjunta (opcional)
 // ---------------------------------------------------------------------------
@@ -504,6 +532,21 @@ Reglas:
  * una foto. El texto y la imagen describen la MISMA comida: se interpretan
  * juntos y producen un único desglose nutricional.
  */
+const FOOD_MEASUREMENT_CONVENTION = `
+
+Convención obligatoria de peso: salvo que el usuario indique expresamente que el peso fue cocido, servido o posterior a la cocción, interpreta los pesos de carnes, pescados y huevos como peso en crudo. Interpreta arroz, pasta, avena, legumbres y cereales como peso en seco. Si el usuario responde aclaraciones que contradicen esta convención, esas aclaraciones prevalecen.`;
+
+const FOOD_QUESTIONS_SYSTEM_PROMPT = `Analizas una comida antes de calcular sus nutrientes. Devuelve preguntas breves y concretas sólo sobre datos que cambien materialmente el cálculo. No preguntes lo que ya sea claro o fácil de inferir: por ejemplo, "3 huevos" no requiere pregunta. Pregunta por cada incertidumbre relevante una sola vez (máximo 5 preguntas): peso o cantidad, si la carne tenía hueso o piel, cortes grasos, aceite o salsas, y tamaño o peso aproximado de porciones ambiguas.
+
+Convención: salvo indicación contraria, los pesos de carne y pescado se tomarán crudos y los de arroz, pasta, avena, legumbres y cereales se tomarán secos. No preguntes por crudo o seco si el usuario no contradijo esa convención; sólo pregunta si su texto es ambiguo respecto a peso con hueso o piel, o describe una porción servida o plato que necesita cantidad. No hagas preguntas de relleno y nunca pidas confirmación de alimentos inequívocos.
+
+Responde ÚNICAMENTE JSON válido, sin markdown, con esta estructura exacta:
+{"questions":[{"id":"q1","question":""}]}`;
+
+const FOOD_QUESTIONS_PHOTO_ADDENDUM = `
+
+Además del texto, recibes una foto de esa misma comida. Úsala solamente para confirmar los alimentos y detectar incertidumbres relevantes; no trates la foto y el texto como comidas distintas.`;
+
 const FOOD_PHOTO_ANALYSIS_ADDENDUM = `
 
 Además del texto, recibes UNA FOTO de la comida. El texto y la foto describen la MISMA comida y debes interpretarlos juntos para producir UN ÚNICO desglose nutricional:
@@ -522,9 +565,12 @@ Además del texto, recibes UNA FOTO de la comida. El texto y la foto describen l
  * principal (con un modelo con visión cuando hay foto) y, sólo para texto, cae al
  * respaldo de DeepSeek. Ninguno de los dos usa búsqueda web.
  */
-async function analyzeFood(foodText, image = null) {
+async function analyzeFood(foodText, image = null, clarifications = '') {
+  const textForAnalysis = clarifications
+    ? `${foodText}\n\nAclaraciones del usuario (úsalas como datos definitivos):\n${clarifications}`
+    : foodText;
   try {
-    return await analyzeWithGroq(foodText, image);
+    return await analyzeWithGroq(textForAnalysis, image);
   } catch (groqErr) {
     console.error('Groq no pudo analizar el alimento:', groqErr.message);
 
@@ -532,7 +578,7 @@ async function analyzeFood(foodText, image = null) {
     // vez de descartar la foto en silencio o mandarla a un modelo sin visión.
     if (!image && DEEPSEEK_API_KEY) {
       try {
-        return await analyzeWithDeepSeek(foodText);
+        return await analyzeWithDeepSeek(textForAnalysis);
       } catch (deepseekErr) {
         console.error('DeepSeek tampoco pudo analizar el alimento:', deepseekErr.message);
       }
@@ -546,9 +592,9 @@ async function analyzeWithGroq(foodText, image = null) {
   // Con foto cambiamos al modelo con visión y enviamos texto e imagen en UN
   // único mensaje de usuario para que el modelo los interprete juntos.
   const activeModel = image ? visionModel : model;
-  const systemPrompt = image
+  const systemPrompt = (image
     ? FOOD_ANALYSIS_SYSTEM_PROMPT + FOOD_PHOTO_ANALYSIS_ADDENDUM
-    : FOOD_ANALYSIS_SYSTEM_PROMPT;
+    : FOOD_ANALYSIS_SYSTEM_PROMPT) + FOOD_MEASUREMENT_CONVENTION;
   const userContent = image
     ? [
         { type: 'text', text: foodText || PHOTO_ONLY_INSTRUCTION },
@@ -578,6 +624,41 @@ async function analyzeWithGroq(foodText, image = null) {
     const salvaged = salvageToolUseFailure(err);
     if (salvaged) return parseAnalysis(salvaged);
     throw err;
+  }
+}
+
+async function generateQuestionsWithGroq(foodText, image = null) {
+  const activeModel = image ? visionModel : model;
+  const userContent = image
+    ? [{ type: 'text', text: foodText || PHOTO_ONLY_INSTRUCTION }, { type: 'image_url', image_url: { url: image.dataUrl } }]
+    : foodText;
+  const completion = await groq.chat.completions.create({
+    model: activeModel,
+    messages: [
+      { role: 'system', content: image ? FOOD_QUESTIONS_SYSTEM_PROMPT + FOOD_QUESTIONS_PHOTO_ADDENDUM : FOOD_QUESTIONS_SYSTEM_PROMPT },
+      { role: 'user', content: userContent },
+    ],
+    response_format: { type: 'json_object' },
+    ...(/gpt-oss/i.test(activeModel) ? { reasoning_effort: 'low' } : {}),
+  });
+  return parseQuestions(completion.choices[0]?.message?.content || '');
+}
+
+async function generateQuestions(foodText, image = null) {
+  try {
+    return await generateQuestionsWithGroq(foodText, image);
+  } catch (groqErr) {
+    console.error('Groq no pudo generar preguntas:', groqErr.message);
+    if (!image && DEEPSEEK_API_KEY) {
+      const response = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DEEPSEEK_API_KEY}` },
+        body: JSON.stringify({ model: DEEPSEEK_MODEL, messages: [{ role: 'system', content: FOOD_QUESTIONS_SYSTEM_PROMPT }, { role: 'user', content: foodText }], response_format: { type: 'json_object' }, temperature: 0.2, max_tokens: 512 }),
+        signal: AbortSignal.timeout(45000),
+      });
+      if (response.ok) return parseQuestions((await response.json())?.choices?.[0]?.message?.content || '');
+    }
+    throw new Error('Eatbud no puede preparar las preguntas en estos momentos.');
   }
 }
 
@@ -678,6 +759,27 @@ app.get('/api/daily-summary', async (req, res) => {
   }
 });
 
+// Primera llamada del flujo de registro: sólo aclara datos, no guarda nada.
+app.post('/api/logs/questions', async (req, res) => {
+  try {
+    await getUserFromReq(req);
+    const foodText = String(req.body.foodText || '').trim();
+    let image = null;
+    try {
+      image = parseImagePayload(req.body.image);
+    } catch (imageError) {
+      return res.status(400).json({ error: imageError.message });
+    }
+    if (!foodText && !image) return res.status(400).json({ error: 'Escribe al menos un alimento o adjuntá una foto.' });
+    if (foodText.length > 2_000) return res.status(400).json({ error: 'El texto no puede superar 2000 caracteres.' });
+    return res.json(await generateQuestions(foodText, image));
+  } catch (error) {
+    if (error.message === 'Unauthorized') return res.status(401).json({ error: 'Unauthorized' });
+    console.error('Could not generate food questions:', error.message);
+    return res.status(502).json({ error: error.message || 'No se pudieron generar las preguntas.' });
+  }
+});
+
 // Registrar una comida (texto, foto o ambos)
 app.post('/api/logs', async (req, res) => {
   try {
@@ -707,7 +809,8 @@ app.post('/api/logs', async (req, res) => {
 
     // Una sola estimación: el texto y la foto se envían juntos al modelo y
     // producen un único desglose nutricional.
-    const analysis = req.body.parsed_data || (await analyzeFood(foodText, image));
+    const clarifications = formatClarifications(req.body.clarifications);
+    const analysis = req.body.parsed_data || (await analyzeFood(foodText, image, clarifications));
     const { data, error } = await supabase
       .from('daily_logs')
       .insert({

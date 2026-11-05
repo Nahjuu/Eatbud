@@ -54,6 +54,9 @@ export default function Main({ lang, t, session, profile, setProfile }) {
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
   const [image, setImage] = useState('');
+  const [questions, setQuestions] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [questionModalOpen, setQuestionModalOpen] = useState(false);
 
   const loadSummary = useCallback(async () => {
     setError('');
@@ -110,7 +113,7 @@ export default function Main({ lang, t, session, profile, setProfile }) {
     setError('');
 
     try {
-      const response = await fetch(`${apiUrl}/logs`, {
+      const response = await fetch(`${apiUrl}/logs/questions`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -121,9 +124,41 @@ export default function Main({ lang, t, session, profile, setProfile }) {
       const data = await response.json();
 
       if (!response.ok) throw new Error(data.error);
+      setQuestions(data.questions || []);
+      setAnswers({});
+      setQuestionModalOpen(true);
+    } catch (requestError) {
+      setError(requestError.message || t.errorSave);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmFood = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch(`${apiUrl}/logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          foodText: foodText.trim(),
+          image: image || undefined,
+          clarifications: questions.map((question) => ({ question: question.question, answer: answers[question.id] || '' })),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
       setSummary(data.summary);
       setFoodText('');
       setImage('');
+      setQuestionModalOpen(false);
+      setQuestions([]);
+      setAnswers({});
     } catch (requestError) {
       setError(requestError.message || t.errorSave);
     } finally {
@@ -208,6 +243,34 @@ export default function Main({ lang, t, session, profile, setProfile }) {
         saveFood={saveFood} 
         t={t} 
       />
+
+      {questionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="food-questions-title">
+          <div className="w-full max-w-lg rounded-[18px] border border-dark-border bg-dark-surface p-5 shadow-2xl sm:p-6">
+            <h2 id="food-questions-title" className="m-0 text-xl font-bold">{t.foodQuestionsTitle}</h2>
+            <p className="mt-2 text-sm text-[#a8bdb6]">{questions.length ? t.foodQuestionsHint : t.foodQuestionsNone}</p>
+            {questions.length > 0 && (
+              <div className="mt-5 grid gap-4">
+                {questions.map((question) => (
+                  <label key={question.id} className="grid gap-1.5 text-sm font-semibold text-slate-100">
+                    {question.question}
+                    <input
+                      value={answers[question.id] || ''}
+                      onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
+                      placeholder={t.foodQuestionsAnswer}
+                      className="w-full rounded-xl border border-[#426a5d] bg-dark-bg p-3 text-base font-normal text-slate-100 outline-none focus:border-brand"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setQuestionModalOpen(false)} disabled={saving} className="rounded-[10px] border border-dark-border px-4 py-[11px] font-bold text-slate-200 hover:bg-dark-bg disabled:opacity-50">{t.cancel}</button>
+              <button type="button" onClick={confirmFood} disabled={saving} className="rounded-[10px] bg-brand px-4 py-[11px] font-extrabold text-brand-dark disabled:opacity-55">{saving ? t.analyzing : t.calculateFood}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && <p className="mt-4 text-[#fecaca]" role="alert">{error}</p>}
 
