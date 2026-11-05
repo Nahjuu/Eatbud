@@ -534,9 +534,14 @@ Reglas:
  */
 const FOOD_MEASUREMENT_CONVENTION = `
 
-Convención obligatoria de peso: salvo que el usuario indique expresamente que el peso fue cocido, servido o posterior a la cocción, interpreta los pesos de carnes, pescados y huevos como peso en crudo. Interpreta arroz, pasta, avena, legumbres y cereales como peso en seco. Si el usuario responde aclaraciones que contradicen esta convención, esas aclaraciones prevalecen.`;
+CONVENCIÓN OBLIGATORIA PARA EL CÁLCULO FINAL:
+- Trata todo peso de carne, pescado o huevo como PESO EN CRUDO, salvo evidencia explícita del usuario de que fue pesado cocido, servido o después de cocinarlo. Nombrar una técnica de cocción (por ejemplo, "a la plancha" o "al horno") no es evidencia de que el peso sea cocido.
+- Trata arroz, pasta, avena, legumbres y cereales como PESO EN SECO, salvo evidencia explícita en contrario. Las respuestas de aclaración del usuario prevalecen únicamente cuando indican de forma clara un peso cocido, servido o seco.
+- El peso de una pieza CON HUESO es peso bruto, NO peso comestible. Antes de calcular macros, descuenta el hueso y cualquier otra parte no comestible usando un rendimiento comestible realista para ese corte. El hueso aporta 0 kcal y nunca puede incluirse como carne en el cálculo.
+- Si la pieza tiene piel, incluye solamente la piel realmente comestible; la presencia de piel no convierte el peso total con hueso en peso de carne. Para un muslo de pollo crudo con piel y hueso, calcula los nutrientes sobre la carne y piel comestibles después de descontar el hueso, nunca sobre el peso bruto completo.
+- En el JSON, refleja la cantidad comestible estimada y usa un nombre claro, por ejemplo "Muslo de pollo crudo con piel (parte comestible)". No infles las calorías aplicando valores cocidos a pesos crudos ni aplicando valores de carne al hueso.`;
 
-const FOOD_QUESTIONS_SYSTEM_PROMPT = `Analizas una comida antes de calcular sus nutrientes. Devuelve preguntas breves y concretas sólo sobre datos que cambien materialmente el cálculo. No preguntes lo que ya sea claro o fácil de inferir: por ejemplo, "3 huevos" no requiere pregunta. Pregunta por cada incertidumbre relevante una sola vez (máximo 5 preguntas): peso o cantidad, si la carne tenía hueso o piel, cortes grasos, aceite o salsas, y tamaño o peso aproximado de porciones ambiguas.
+const FOOD_QUESTIONS_SYSTEM_PROMPT = `Analizas una comida antes de calcular sus nutrientes. Devuelve preguntas breves y concretas sólo sobre datos que cambien materialmente el cálculo. La cantidad de preguntas debe ser variable: devuelve 0 si no falta ningún dato relevante, 1 si sólo hay una incertidumbre, y nunca más de 5. NO intentes llegar a un número mínimo de preguntas ni agregues preguntas de relleno. No preguntes lo que ya sea claro o fácil de inferir: por ejemplo, "3 huevos" no requiere pregunta. Pregunta por cada incertidumbre relevante una sola vez: peso o cantidad, si la carne tenía hueso o piel, cortes grasos, aceite o salsas, y tamaño o peso aproximado de porciones ambiguas.
 
 Convención: salvo indicación contraria, los pesos de carne y pescado se tomarán crudos y los de arroz, pasta, avena, legumbres y cereales se tomarán secos. No preguntes por crudo o seco si el usuario no contradijo esa convención; sólo pregunta si su texto es ambiguo respecto a peso con hueso o piel, o describe una porción servida o plato que necesita cantidad. No hagas preguntas de relleno y nunca pidas confirmación de alimentos inequívocos.
 
@@ -673,7 +678,7 @@ async function analyzeWithDeepSeek(foodText) {
     body: JSON.stringify({
       model: DEEPSEEK_MODEL,
       messages: [
-        { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT },
+        { role: 'system', content: FOOD_ANALYSIS_SYSTEM_PROMPT + FOOD_MEASUREMENT_CONVENTION },
         { role: 'user', content: foodText },
       ],
       response_format: { type: 'json_object' },
